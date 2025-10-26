@@ -104,8 +104,9 @@ while app_running:
                 break
 
             current_time = engine.get_current_time()
-            active_events = engine.get_next_events()
-            graphics.update(active_events, current_time, pressed_notes)
+            visible_spans = engine.get_visible_spans(current_time)
+            graphics.update_bars(visible_spans, current_time, pressed_notes)
+
     finally:
         # limpeza
         try:

@@ -32,6 +32,17 @@ class Graphics:
 
         self.clock = pygame.time.Clock()
         self.config = load_config()
+        self.scroll_speed = 140  # pixels por segundo (ajuste fino)
+        # pré-calcula geometria das teclas (brancas e pretas) para mapear X corretamente
+        white_note_offsets = [0, 2, 4, 5, 7, 9, 11]
+        self.white_notes = [
+            n
+            for n in range(self.lowest_note, self.lowest_note + self.num_keys)
+            if n % 12 in white_note_offsets
+        ]
+        self.white_key_width = self.screen_width // len(self.white_notes)
+        self.black_key_width = self.white_key_width * 0.6
+
         self.num_keys = self.config["keyboard_keys"]
         self.lowest_note = self.config.get("lowest_note", 36)
         self.key_width = self.screen_width // self.num_keys
@@ -140,3 +151,68 @@ class Graphics:
 
     def quit(self):
         pygame.quit()
+
+    def note_to_xw(self, note):
+        """
+        Retorna (x, width, is_black) alinhado com o teclado já desenhado.
+        """
+        is_black = (note % 12) in (1, 3, 6, 8, 10)
+        if not is_black:
+            # índice da nota dentro das brancas
+            try:
+                idx = self.white_notes.index(note)
+            except ValueError:
+                # se a nota não for branca no range, aproxima pela vizinha
+                # (não deve acontecer se lowest_note/num_keys cobrem o teclado)
+                idx = 0
+            x = idx * self.white_key_width
+            return x, self.white_key_width, False
+        else:
+            # preta fica entre duas brancas: C -> C# antes de D, etc.
+            # encontre a branca imediatamente anterior (note-1)
+            left_white = note - 1
+            # posição de onde a preta fica: no "lado direito" da branca à esquerda
+            try:
+                idx = self.white_notes.index(left_white)
+                x = (idx + 1) * self.white_key_width - (self.black_key_width / 2)
+            except ValueError:
+                # fallback: encosta na borda esquerda
+                x = 0
+            return x, self.black_key_width, True
+
+    def draw_note_bars_upwards(self, spans, current_time):
+        """
+        Para cada span:
+        - base (linha de acerto) é imediatamente acima do teclado branco
+        - y_base sobe conforme o momento de início se aproxima
+        - altura = duração * velocidade
+        """
+        hit_line_y = self.screen_height - WHITE_KEY_HEIGHT  # linha de acerto
+        for s in spans:
+            start = s["start"]
+            end = s["end"]
+            duration = max(0.05, end - start)
+
+            # tempo até o início chegar na linha de acerto
+            time_to_start = (
+                start - current_time
+            )  # se >0 ainda vai chegar; se <0 já começou
+            y_base = hit_line_y - (time_to_start * self.scroll_speed)
+            height = duration * self.scroll_speed
+            y_top = y_base - height
+
+            x, w, is_black = self.note_to_xw(s["note"])
+
+            # culling simples (fora de tela)
+            if y_top > self.screen_height or y_base < 0:
+                continue
+
+            # cor: usa BLUE para barras; você pode diferenciar pretas/brancas se quiser
+            pygame.draw.rect(self.screen, BLUE, (x, y_top, w, height))
+
+    def update_bars(self, visible_spans, current_time, pressed_notes):
+        self.screen.fill(BLACK)
+        self.draw_note_bars_upwards(visible_spans, current_time)
+        self.draw_keyboard(pressed_notes)
+        pygame.display.flip()
+        self.clock.tick(FPS)

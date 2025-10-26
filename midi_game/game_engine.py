@@ -1,11 +1,12 @@
 import time
 
-from midi_game.midi_loader import load_midi_file
+from midi_game.midi_loader import build_note_spans, load_midi_file
 
 
 class GameEngine:
     def __init__(self, midi_filename):
         self.events = load_midi_file(midi_filename)
+        self.note_spans = build_note_spans(self.events)
         self.current_index = 0
         self.start_time = None
         self.score = 0
@@ -52,3 +53,17 @@ class GameEngine:
 
     def is_finished(self):
         return self.current_index >= len(self.events)
+
+    def get_visible_spans(self, current_time, window_ahead=8.0, window_behind=1.0):
+        """
+        Retorna as barras (spans) que estão no range de visualização:
+        aparecem se já começaram há até 'window_behind' s
+        ou vão começar nos próximos 'window_ahead' s.
+        """
+        start_min = current_time - window_behind
+        start_max = current_time + window_ahead
+        visible = []
+        for s in self.note_spans:
+            if s["end"] >= start_min and s["start"] <= start_max:
+                visible.append(s)
+        return visible
