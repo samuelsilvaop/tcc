@@ -20,12 +20,16 @@ if not show_splash(graphics):
     raise SystemExit
 
 # 2) Menu
-if run_menu(graphics) != "start":
+# 2) Menu
+menu_result = run_menu(graphics)
+if menu_result.get("action") != "start":
     graphics.quit()
     raise SystemExit
-engine.start()
-play_music("fairy_tale.mid")
 
+chosen_midi = menu_result.get("midi", "fairy_tale.mid")
+engine = GameEngine(chosen_midi)  # <- usa o escolhido
+engine.start()
+play_music(chosen_midi)
 
 pressed_notes = set()
 port = open_midi_port()
