@@ -12,8 +12,8 @@ RED = (255, 50, 50)
 NOTE_HEIGHT = 20
 FPS = 60
 
-WHITE_KEY_HEIGHT = int(60 * 1.95)
-BLACK_KEY_HEIGHT = int(40 * 1.95)
+WHITE_KEY_HEIGHT = int(60 * 3.95)
+BLACK_KEY_HEIGHT = int(40 * 3.95)
 
 
 class Graphics:

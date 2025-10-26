@@ -1,65 +1,110 @@
 import os
+import tempfile
 
 import ffmpeg
-import requests
-from midi2audio import FluidSynth as FSConverter  # alternativa real via wrapper
+from mido import MidiFile  # vamos checar duração de forma simples
 
 MIDI_FOLDER = "midi_game/assets/midi"
-SOUNDFONT_PATH = "midi_game/assets/sf2/GeneralUserGS.sf2"
-SOUNDFONT_URL = (
-    "https://github.com/urish/cppfluid/raw/master/examples/FluidSynth/data/example.sf2"
-)
+SF2_FOLDER = "midi_game/assets/sf2"
 SAMPLE_RATE = 44100
 
 
-def ensure_soundfont():
-    sf_dir = os.path.dirname(SOUNDFONT_PATH)
-    os.makedirs(sf_dir, exist_ok=True)
+def _pick_local_soundfont():
+    """Retorna o caminho do primeiro .sf2 encontrado em assets/sf2, ou None."""
+    os.makedirs(SF2_FOLDER, exist_ok=True)
+    for fname in os.listdir(SF2_FOLDER):
+        if fname.lower().endswith(".sf2"):
+            return os.path.join(SF2_FOLDER, fname)
+    return None
 
-    if os.path.exists(SOUNDFONT_PATH):
-        return
 
-    print("⬇️ Baixando SoundFont padrão...")
-
+def _render_with_fluidsynth(sf2_path, midi_path, wav_path):
+    """
+    Renderiza MIDI → WAV usando o binário fluidsynth via ffmpeg-python (sem pydub).
+    Observação: pyfluidsynth não expõe midi_file_play em todas as versões;
+    para o TCC, a abordagem mais estável é invocar o fluidsynth CLI se disponível.
+    """
+    # Checagem simples de duração (para logs úteis)
     try:
-        r = requests.get(SOUNDFONT_URL, allow_redirects=True, timeout=10)
-        if r.status_code == 200:
-            with open(SOUNDFONT_PATH, "wb") as f:
-                f.write(r.content)
-            print("✅ SoundFont baixado com sucesso.")
-        else:
-            print(
-                f"❌ Falha no download: {r.status_code}. O jogo continuará, mas sem som real."
-            )
-    except Exception as e:
-        print(f"❌ Sem conexão: {e}. O jogo continuará, mas sem som real.")
+        mid = MidiFile(midi_path)
+        approx_sec = sum(m.time for m in mid) or 0.0
+    except Exception:
+        approx_sec = 0.0
+
+    # Tenta usar o binário `fluidsynth` se existir
+    fluidsynth_bin = _which("fluidsynth")
+    if not fluidsynth_bin:
+        raise RuntimeError(
+            "fluidsynth não encontrado no sistema. "
+            "Instale-o (ex.: pacman -S fluidsynth / apt install fluidsynth). "
+            "Ou coloque um arquivo .ogg já pronto na pasta midi."
+        )
+
+    # Comando: fluidsynth -F out.wav -ni soundfont.sf2 musica.mid
+    # Usamos ffmpeg-python só pra manter dependência de áudio consistente; aqui
+    # chamaremos o fluidsynth via os.system/exec tradicional.
+    import subprocess
+
+    cmd = [
+        fluidsynth_bin,
+        "-ni",
+        sf2_path,
+        midi_path,
+        "-F",
+        wav_path,
+        "-r",
+        str(SAMPLE_RATE),
+    ]
+    subprocess.run(cmd, check=True)
+
+
+def _which(cmd):
+    """Retorna caminho absoluto do executável se existir no PATH, senão None."""
+    from shutil import which
+
+    return which(cmd)
 
 
 def convert_all_mid_to_ogg():
-    ensure_soundfont()
+    """
+    Para cada .mid em assets/midi:
+      - se já existe .ogg correspondente, pula;
+      - se houver um .sf2 em assets/sf2, tenta renderizar .wav + converter pra .ogg;
+      - se não houver .sf2, avisa e segue sem quebrar.
+    """
+    sf2 = _pick_local_soundfont()
+    if not os.path.isdir(MIDI_FOLDER):
+        os.makedirs(MIDI_FOLDER, exist_ok=True)
 
     for filename in os.listdir(MIDI_FOLDER):
-        if filename.lower().endswith(".mid"):
-            base = os.path.splitext(filename)[0]
-            midi_path = os.path.join(MIDI_FOLDER, filename)
-            wav_path = os.path.join(MIDI_FOLDER, f"{base}.wav")
-            ogg_path = os.path.join(MIDI_FOLDER, f"{base}.ogg")
+        if not filename.lower().endswith(".mid"):
+            continue
 
-            if os.path.exists(ogg_path):
-                continue
+        base = os.path.splitext(filename)[0]
+        midi_path = os.path.join(MIDI_FOLDER, filename)
+        ogg_path = os.path.join(MIDI_FOLDER, f"{base}.ogg")
 
-            print(f"🎼 Convertendo {filename} -> {base}.ogg")
+        if os.path.exists(ogg_path):
+            continue  # já convertido
 
+        if not sf2:
+            print(
+                f"⚠️ Sem SoundFont (.sf2) em {SF2_FOLDER}. "
+                f"Coloque um arquivo .sf2 (ex.: FluidR3_GM.sf2 ou GeneralUser GS.sf2) "
+                f"para habilitar a música. Pulando conversão de {filename}."
+            )
+            continue
+
+        print(
+            f"🎼 Convertendo {filename} → {base}.ogg usando {os.path.basename(sf2)} ..."
+        )
+
+        # Renderiza para WAV temporário e converte para OGG
+        with tempfile.TemporaryDirectory() as tmp:
+            wav_path = os.path.join(tmp, f"{base}.wav")
             try:
-                # Alternativa com midi2audio (mais confiável que usar Synth direto)
-                converter = FSConverter(
-                    sound_font=SOUNDFONT_PATH, sample_rate=SAMPLE_RATE
-                )
-                converter.midi_to_audio(midi_path, wav_path)
-
+                _render_with_fluidsynth(sf2, midi_path, wav_path)
                 ffmpeg.input(wav_path).output(ogg_path, loglevel="quiet").run()
-                os.remove(wav_path)
-
-                print(f"✅ {base}.ogg gerado com sucesso.")
+                print(f"✅ {base}.ogg gerado.")
             except Exception as e:
                 print(f"❌ Erro ao converter {filename}: {e}")

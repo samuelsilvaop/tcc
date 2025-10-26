@@ -10,9 +10,16 @@ def play_music(midi_filename):
     ogg_file = os.path.join(MIDI_FOLDER, f"{base}.ogg")
 
     if not os.path.exists(ogg_file):
-        print(f"⚠️ Arquivo de áudio correspondente não encontrado: {ogg_file}")
+        print(f"⚠️ Sem áudio para {midi_filename} (arquivo {base}.ogg não existe).")
         return
 
-    pygame.mixer.init()
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+
     pygame.mixer.music.load(ogg_file)
     pygame.mixer.music.play()
+
+
+def stop_music():
+    if pygame.mixer.get_init():
+        pygame.mixer.music.stop()
