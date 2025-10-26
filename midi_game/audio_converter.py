@@ -2,11 +2,11 @@ import os
 import tempfile
 
 import ffmpeg
-from mido import MidiFile  # vamos checar duração de forma simples
+from mido import MidiFile
 
 MIDI_FOLDER = "midi_game/assets/midi"
 SF2_FOLDER = "midi_game/assets/sf2"
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 48000  # 44100
 
 
 def _pick_local_soundfont():

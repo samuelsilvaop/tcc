@@ -2,10 +2,12 @@ import os
 
 import pygame.mixer
 
+from midi_game.config import load_config
+
 MIDI_FOLDER = "midi_game/assets/midi"
 
 
-def play_music(midi_filename):
+def play_music(midi_filename, volume: float | None = None):
     base = os.path.splitext(midi_filename)[0]
     ogg_file = os.path.join(MIDI_FOLDER, f"{base}.ogg")
 
@@ -16,7 +18,11 @@ def play_music(midi_filename):
     if not pygame.mixer.get_init():
         pygame.mixer.init()
 
+    if volume is None:
+        volume = float(load_config().get("music_volume", 0.7))
+
     pygame.mixer.music.load(ogg_file)
+    pygame.mixer.music.set_volume(max(0.0, min(1.0, volume)))
     pygame.mixer.music.play()
 
 
