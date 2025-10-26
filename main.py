@@ -1,49 +1,40 @@
 import threading
-import time
 
-from midi_game.config import set_midi_port
+from midi_game.audio_converter import convert_all_mid_to_ogg
 from midi_game.game_engine import GameEngine
-from midi_game.midi_input import list_midi_ports, open_midi_port
-from midi_game.midi_loader import list_midi_files
+from midi_game.graphics import Graphics
+from midi_game.midi_input import open_midi_port
+from midi_game.sounds import play_music
 
-# === Escolher porta MIDI ===
-ports = list_midi_ports()
-print("Portas disponíveis:")
-for i, p in enumerate(ports):
-    print(f"{i}: {p}")
-choice = int(input("Escolha a porta MIDI: "))
-set_midi_port(ports[choice])
+convert_all_mid_to_ogg()
+
+engine = GameEngine("fairy_tale.mid")
+graphics = Graphics()
+engine.start()
+play_music("fairy_tale.mid")
+
+
+pressed_notes = set()
 port = open_midi_port()
 
-# === Escolher música ===
-midis = list_midi_files()
-print("Músicas disponíveis:")
-for i, m in enumerate(midis):
-    print(f"{i}: {m}")
-music_choice = int(input("Escolha a música: "))
-engine = GameEngine(midis[music_choice])
-engine.start()
 
-
-# === Thread para escutar teclado ===
 def midi_listener():
     for msg in port:
         if msg.type == "note_on" and msg.velocity > 0:
-            result = engine.check_note_input(msg.note)
-            print(f"{'✅ Acertou' if result else '❌ Errou'} nota {msg.note}")
+            pressed_notes.add(msg.note)
+            engine.check_note_input(msg.note)
+        elif msg.type == "note_off" or (msg.type == "note_on" and msg.velocity == 0):
+            pressed_notes.discard(msg.note)
 
 
-listener_thread = threading.Thread(target=midi_listener, daemon=True)
-listener_thread.start()
+threading.Thread(target=midi_listener, daemon=True).start()
 
-# === Loop do jogo ===
-print("🎮 Jogo iniciado!")
-while not engine.is_finished():
-    events = engine.get_next_events()
-    for e in events:
-        if e["type"] == "note_on":
-            print(f"▶️ Exibir nota {e['note']} em {round(e['time'], 2)}s")
-    time.sleep(0.05)
+running = True
+while running and not engine.is_finished():
+    running = graphics.handle_events()
 
-print("\n🏁 Fim da música!")
-print(f"🎯 Pontuação final: {engine.score}/{engine.total_notes}")
+    current_time = engine.get_current_time()
+    active_events = engine.get_next_events()
+    graphics.update(active_events, current_time, pressed_notes)
+
+graphics.quit()

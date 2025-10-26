@@ -1,1 +1,4 @@
 requests
+pygame
+pyfluidsynth
+pydub

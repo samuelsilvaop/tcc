@@ -3,7 +3,11 @@ import os
 
 CONFIG_PATH = "midi_game/config.json"
 
-DEFAULT_CONFIG = {"keyboard_keys": 49, "midi_port": None}
+DEFAULT_CONFIG = {
+    "keyboard_keys": 61,
+    "midi_port": None,
+    "lowest_note": 36,
+}
 
 
 def load_config():
