@@ -1,6 +1,5 @@
 import threading
 
-import pygame
 from midi_game.audio_converter import convert_all_mid_to_ogg
 from midi_game.config import load_config
 from midi_game.countdown import show_countdown
@@ -24,31 +23,28 @@ if not show_splash(graphics):
 
 app_running = True
 while app_running:
-    # Menu (retorna dict: {"action":"start","midi":"..."} ou {"action":"quit"})
+    # Menu
     menu_result = run_menu(graphics)
     if menu_result.get("action") != "start":
         break
 
     chosen_midi = menu_result.get("midi", "fairy_tale.mid")
-
-    # Recarrega config (pode ter mudado nos Ajustes)
     cfg = load_config()
 
-    # Contagem "prepare-se"
+    # “Prepare-se” 3-2-1
     show_countdown(graphics)
 
     # Engine + música (se habilitada)
     engine = GameEngine(chosen_midi)
     engine.start()
     if cfg.get("music_enabled", True):
-        # usa volume do config dentro do play_music()
         play_music(chosen_midi)
 
     # Porta MIDI
     pressed_notes = set()
     port = open_midi_port()
 
-    # LiveSynth (som do teclado) — sem nota de teste: diagnose_and_test=False
+    # Som do teclado ao vivo
     live = (
         create_live_synth(
             diagnose_and_test=False, gain=float(cfg.get("live_volume", 0.5))
@@ -60,7 +56,6 @@ while app_running:
     def midi_listener():
         sustain_down = False
         for msg in port:
-            # Eco ao vivo (se habilitado)
             if live:
                 if msg.type == "control_change" and msg.control == 64:
                     sustain_down = msg.value >= 64
@@ -72,7 +67,6 @@ while app_running:
                 ):
                     live.note_off(msg.note)
 
-            # Lógica do jogo
             if msg.type == "note_on" and msg.velocity > 0:
                 pressed_notes.add(msg.note)
                 engine.check_note_input(msg.note)
@@ -83,32 +77,14 @@ while app_running:
 
     threading.Thread(target=midi_listener, daemon=True).start()
 
-    # Loop do jogo — ESC volta pro menu, fechar janela encerra app
-    back_to_menu = False
-    quit_requested = False
     try:
         running = True
         while running and not engine.is_finished():
-            # tratamos eventos aqui para distinguir ESC de fechar janela
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    quit_requested = True
-                    running = False
-                    break
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    back_to_menu = True
-                    running = False
-                    break
-
-            if not running:
-                break
-
-            current_time = engine.get_current_time()
-            visible_spans = engine.get_visible_spans(current_time)
-            graphics.update_bars(visible_spans, current_time, pressed_notes)
-
+            running = graphics.handle_events()  # ESC -> volta ao menu
+            t = engine.get_current_time()
+            spans = engine.get_visible_spans(t, window_ahead=8.0, window_behind=1.0)
+            graphics.update_bars(spans, t, pressed_notes)
     finally:
-        # limpeza
         try:
             port.close()
         except Exception:
@@ -116,14 +92,5 @@ while app_running:
         if live:
             live.close()
         stop_music()
-
-    if quit_requested:
-        app_running = False
-    elif back_to_menu:
-        # volta ao while app_running para reabrir o menu
-        continue
-    else:
-        # música terminou normalmente: volta ao menu também
-        continue
 
 graphics.quit()

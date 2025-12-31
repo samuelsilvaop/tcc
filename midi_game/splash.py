@@ -21,7 +21,7 @@ def show_splash(graphics) -> bool:
     text_sub = "MIDI Hero"
 
     start_ms = pygame.time.get_ticks()
-    duration_ms = 2000  # 2.000 ms = 2s exatos
+    duration_ms = 1000  # 2.000 ms = 2s exatos
 
     while True:
         # eventos (permitir sair com ESC/fechar janela)
