@@ -4,6 +4,8 @@
     "live_keyboard_sound": true,
     "music_enabled": true,
     "live_volume": 1.0,
-    "music_volume": 0.49999999999999994,
-    "lowest_note": 36
+    "music_volume": 0.6,
+    "lowest_note": 36,
+    "sync_offset": -0.10
+
 }
