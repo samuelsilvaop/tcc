@@ -4,6 +4,8 @@ import time
 import pygame
 import pygame.freetype
 
+from midi_game.fonts import get_font
+
 BG = (0, 0, 0)
 FG = (230, 230, 230)
 HILITE = (70, 170, 255)
@@ -25,9 +27,9 @@ def show_countdown(graphics, seconds=3):
     W, H = graphics.screen_width, graphics.screen_height
 
     pygame.freetype.init()
-    title_font = pygame.freetype.SysFont(None, int(H * 0.09))
-    big_font = pygame.freetype.SysFont(None, int(H * 0.20))
-    hint_font = pygame.freetype.SysFont(None, int(H * 0.035))
+    title_font = get_font(int(H * 0.09), bold=False)
+    big_font = get_font(int(H * 0.20), bold=True)
+    hint_font = get_font(int(H * 0.035), bold=False)
 
     # Tela "Prepare-se..."
     t0 = time.time()
@@ -62,7 +64,7 @@ def show_countdown(graphics, seconds=3):
 
             screen.fill(BG)
             _center_text(screen, big_font, str(n), int(H * 0.33), HILITE)
-            _center_text(screen, hint_font, "Segure-se! 🎹", int(H * 0.60), FG)
+            _center_text(screen, hint_font, "Segure-se! ♪", int(H * 0.60), FG)
             pygame.display.flip()
             clock.tick(60)
 

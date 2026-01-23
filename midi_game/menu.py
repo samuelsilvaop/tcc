@@ -12,6 +12,7 @@ from midi_game.config import (
     set_music_enabled,
     set_music_volume,
 )
+from midi_game.fonts import get_font
 from midi_game.midi_input import list_midi_ports
 from midi_game.midi_loader import list_midi_files
 
@@ -46,9 +47,9 @@ def _adjust_volume(graphics, title: str, current: float) -> float | None:
     screen, clock = graphics.screen, graphics.clock
     W, H = graphics.screen_width, graphics.screen_height
     pygame.freetype.init()
-    title_font = pygame.freetype.SysFont(None, int(H * 0.06))
-    val_font = pygame.freetype.SysFont(None, int(H * 0.10))
-    hint_font = pygame.freetype.SysFont(None, int(H * 0.03))
+    title_font = get_font(int(H * 0.06), bold=True)
+    val_font = get_font(int(H * 0.10), bold=True)
+    hint_font = get_font(int(H * 0.03), bold=True)
 
     vol = _clamp01(current)
 
@@ -95,9 +96,9 @@ def _vertical_menu(
     W, H = graphics.screen_width, graphics.screen_height
 
     pygame.freetype.init()
-    title_font = pygame.freetype.SysFont(None, int(H * 0.07))
-    item_font = pygame.freetype.SysFont(None, int(H * 0.04))
-    foot_font = pygame.freetype.SysFont(None, int(H * 0.03))
+    title_font = get_font(int(H * 0.07), bold=True)
+    item_font = get_font(int(H * 0.04), bold=True)
+    foot_font = get_font(int(H * 0.03), bold=True)
 
     while True:
         for e in pygame.event.get():
@@ -163,9 +164,9 @@ def _pick_lowest_note(graphics):
     W, H = graphics.screen_width, graphics.screen_height
 
     pygame.freetype.init()
-    title_font = pygame.freetype.SysFont(None, int(H * 0.065))
-    val_font = pygame.freetype.SysFont(None, int(H * 0.06))
-    hint_font = pygame.freetype.SysFont(None, int(H * 0.03))
+    title_font = get_font(int(H * 0.065), bold=True)
+    val_font = get_font(int(H * 0.06), bold=True)
+    hint_font = get_font(int(H * 0.03), bold=True)
 
     presets = [21, 33, 36, 48]  # A0, A1, C2, C3 – comuns em 49/61/76/88
     idx = 2  # C2 como default

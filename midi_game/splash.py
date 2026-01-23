@@ -2,6 +2,8 @@
 import pygame
 import pygame.freetype
 
+from midi_game.fonts import get_font
+
 
 def show_splash(graphics) -> bool:
     """
@@ -14,8 +16,8 @@ def show_splash(graphics) -> bool:
 
     # fontes
     pygame.freetype.init()
-    credit_font = pygame.freetype.SysFont(None, int(H * 0.045))
-    sub_font = pygame.freetype.SysFont(None, int(H * 0.028))
+    credit_font = get_font(int(H * 0.045))
+    sub_font = get_font(int(H * 0.028))
 
     text_main = "desenvolvido por Samuel Silva"
     text_sub = "MIDI Hero"
