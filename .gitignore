@@ -5,3 +5,6 @@ __pycache__/
 venv/
 .idea/
 .DS_Store
+
+# SoundFonts (grandes)
+midi_game/assets/sf2/*.sf2
