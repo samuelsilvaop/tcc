@@ -1,12 +1,13 @@
 import os
+import subprocess
 import tempfile
+from shutil import which
 
 import ffmpeg
-from mido import MidiFile
 
 MIDI_FOLDER = "midi_game/assets/midi"
 SF2_FOLDER = "midi_game/assets/sf2"
-SAMPLE_RATE = 48000  # 44100
+SAMPLE_RATE = 48000
 
 
 def _pick_local_soundfont():
@@ -19,59 +20,30 @@ def _pick_local_soundfont():
 
 
 def _render_with_fluidsynth(sf2_path, midi_path, wav_path):
-    """
-    Renderiza MIDI → WAV usando o binário fluidsynth via ffmpeg-python (sem pydub).
-    Observação: pyfluidsynth não expõe midi_file_play em todas as versões;
-    para o TCC, a abordagem mais estável é invocar o fluidsynth CLI se disponível.
-    """
-    # Checagem simples de duração (para logs úteis)
-    try:
-        mid = MidiFile(midi_path)
-        approx_sec = sum(m.time for m in mid) or 0.0
-    except Exception:
-        approx_sec = 0.0
-
-    # Tenta usar o binário `fluidsynth` se existir
-    fluidsynth_bin = _which("fluidsynth")
+    """Renderiza MIDI → WAV usando o binário fluidsynth."""
+    fluidsynth_bin = which("fluidsynth")
     if not fluidsynth_bin:
         raise RuntimeError(
             "fluidsynth não encontrado no sistema. "
-            "Instale-o (ex.: pacman -S fluidsynth / apt install fluidsynth). "
-            "Ou coloque um arquivo .ogg já pronto na pasta midi."
+            "Instale-o (ex.: pacman -S fluidsynth / apt install fluidsynth)."
         )
-
-    # Comando: fluidsynth -F out.wav -ni soundfont.sf2 musica.mid
-    # Usamos ffmpeg-python só pra manter dependência de áudio consistente; aqui
-    # chamaremos o fluidsynth via os.system/exec tradicional.
-    import subprocess
 
     cmd = [
         fluidsynth_bin,
-        "-ni",
-        sf2_path,
-        midi_path,
+        "-ni",  # Sem interface
         "-F",
-        wav_path,
+        wav_path,  # Output file
         "-r",
-        str(SAMPLE_RATE),
+        str(SAMPLE_RATE),  # Sample rate
+        sf2_path,  # Soundfont
+        midi_path,  # MIDI file
     ]
-    subprocess.run(cmd, check=True)
 
-
-def _which(cmd):
-    """Retorna caminho absoluto do executável se existir no PATH, senão None."""
-    from shutil import which
-
-    return which(cmd)
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def convert_all_mid_to_ogg():
-    """
-    Para cada .mid em assets/midi:
-      - se já existe .ogg correspondente, pula;
-      - se houver um .sf2 em assets/sf2, tenta renderizar .wav + converter pra .ogg;
-      - se não houver .sf2, avisa e segue sem quebrar.
-    """
+    """Converte todos os .mid em assets/midi para .ogg."""
     sf2 = _pick_local_soundfont()
     if not os.path.isdir(MIDI_FOLDER):
         os.makedirs(MIDI_FOLDER, exist_ok=True)
@@ -85,26 +57,29 @@ def convert_all_mid_to_ogg():
         ogg_path = os.path.join(MIDI_FOLDER, f"{base}.ogg")
 
         if os.path.exists(ogg_path):
-            continue  # já convertido
+            continue
 
         if not sf2:
             print(
                 f"⚠️ Sem SoundFont (.sf2) em {SF2_FOLDER}. "
-                f"Coloque um arquivo .sf2 (ex.: FluidR3_GM.sf2 ou GeneralUser GS.sf2) "
-                f"para habilitar a música. Pulando conversão de {filename}."
+                f"Pulando conversão de {filename}."
             )
             continue
 
-        print(
-            f"🎼 Convertendo {filename} → {base}.ogg usando {os.path.basename(sf2)} ..."
-        )
+        print(f"🎼 Convertendo {filename} → {base}.ogg...")
 
-        # Renderiza para WAV temporário e converte para OGG
         with tempfile.TemporaryDirectory() as tmp:
             wav_path = os.path.join(tmp, f"{base}.wav")
             try:
                 _render_with_fluidsynth(sf2, midi_path, wav_path)
-                ffmpeg.input(wav_path).output(ogg_path, loglevel="quiet").run()
+                (
+                    ffmpeg.input(wav_path)
+                    .output(ogg_path, loglevel="quiet")
+                    .overwrite_output()
+                    .run()
+                )
                 print(f"✅ {base}.ogg gerado.")
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Erro no fluidsynth: {e.stderr}")
             except Exception as e:
                 print(f"❌ Erro ao converter {filename}: {e}")
