@@ -14,7 +14,10 @@ from midi_game.sounds import play_music, stop_music
 from midi_game.splash import show_splash
 
 PRE_ROLL_SECONDS = 2.0  # espera extra após 3-2-1
-HIT_WINDOW = 0.08  # 80ms de tolerância
+HIT_WINDOW = 0.08  # 80ms de tolerância para "engatar" a nota
+MAX_SPAN_SCORE = (
+    100  # pontos máximos por span quando segurou 100% do tempo (sem penalidade)
+)
 
 
 def try_hit(note: int, visible_spans: list[dict], current_time: float):
@@ -31,6 +34,15 @@ def try_hit(note: int, visible_spans: list[dict], current_time: float):
     if best and best_dt <= HIT_WINDOW:
         return best, best_dt
     return None, None
+
+
+def _timing_multiplier(dt: float) -> float:
+    """Penalidade por timing no momento do engate (note_on)."""
+    if dt < 0.03:
+        return 1.0
+    if dt < 0.06:
+        return 0.7
+    return 0.4
 
 
 def main():
@@ -65,7 +77,7 @@ def main():
             sync_offset = float(cfg.get("sync_offset", 0.0))
 
             engine = GameEngine(chosen_midi)
-            max_score = engine.get_max_score(max_per_note=100)
+            max_score = engine.get_max_score(max_per_span=MAX_SPAN_SCORE)
 
             # engine começa no futuro (pré-roll visual)
             t_start = time.time() + PRE_ROLL_SECONDS
@@ -112,7 +124,12 @@ def main():
             threading.Thread(target=midi_listener, daemon=True).start()
 
             music_started = False
-            scored_spans: set[tuple[int, float, float]] = set()  # evita pontuar 2x
+
+            # evita pontuar 2x o mesmo span
+            finished_spans: set[tuple[int, float, float]] = set()
+
+            # spans "engatados": nota correta pressionada -> acumula pontos proporcional ao tempo segurado
+            active_hits: dict[int, dict] = {}  # note -> state
 
             try:
                 running = True
@@ -136,7 +153,7 @@ def main():
                             play_music(chosen_midi)
                         music_started = True
 
-                    # HIT: pontua somente quando a nota foi apertada (note_on)
+                    # NOTE_ON -> tenta "engatar" um span
                     if just_pressed:
                         pending = list(just_pressed)
                         just_pressed.clear()
@@ -146,12 +163,92 @@ def main():
                                 continue
 
                             span_key = (s["note"], s["start"], s["end"])
-                            if span_key in scored_spans:
+                            if span_key in finished_spans:
                                 continue
-                            scored_spans.add(span_key)
 
-                            score = 100 if dt < 0.03 else 70 if dt < 0.06 else 40
-                            graphics.register_hit(note, span_key, score)
+                            # se já tá engatado exatamente esse span nessa nota, ignora
+                            if (
+                                note in active_hits
+                                and active_hits[note].get("span_key") == span_key
+                            ):
+                                continue
+
+                            quality = _timing_multiplier(float(dt))
+                            rate = engine.get_span_points_rate(
+                                s, max_span_score=MAX_SPAN_SCORE
+                            )
+
+                            # começa a contar a partir do instante atual (clamp no início do span)
+                            last_t = max(float(t_visual), float(s["start"]))
+
+                            active_hits[note] = {
+                                "span_key": span_key,
+                                "start": float(s["start"]),
+                                "end": float(s["end"]),
+                                "rate": float(
+                                    rate
+                                ),  # pontos por segundo (p/ esse span)
+                                "quality": float(
+                                    quality
+                                ),  # penalidade por timing no engate
+                                "last_t": float(
+                                    last_t
+                                ),  # último tempo computado dentro do span
+                                "earned": 0.0,  # pontos ganhos nesse span
+                                "max_allowed": float(MAX_SPAN_SCORE) * float(quality),
+                            }
+
+                            # feedback visual do engate (sem pontuar aqui)
+                            graphics.register_hit_start(note, span_key)
+
+                    # acumula pontos por frame para spans engatados
+                    now_t = float(t_visual)
+                    to_remove: list[int] = []
+
+                    for note, st in list(active_hits.items()):
+                        span_key = st["span_key"]
+                        end_t = st["end"]
+
+                        # se soltou a tecla, finaliza
+                        if note not in pressed_notes:
+                            to_remove.append(note)
+                            continue
+
+                        # calcula delta de tempo dentro do span
+                        t1 = min(now_t, end_t)
+                        dt_hold = t1 - st["last_t"]
+                        if dt_hold > 0:
+                            add = st["rate"] * dt_hold * st["quality"]
+
+                            # trava pra nunca passar do máximo do span (já considerando qualidade)
+                            remaining = st["max_allowed"] - st["earned"]
+                            if remaining <= 0:
+                                add = 0.0
+                            elif add > remaining:
+                                add = remaining
+
+                            if add > 0:
+                                st["earned"] += add
+                                st["last_t"] = t1
+                                graphics.add_score(add)
+
+                        # terminou o span pelo tempo -> finaliza
+                        if now_t >= end_t:
+                            to_remove.append(note)
+
+                    # finalizações: popup 1x com o total ganho naquele span
+                    for note in to_remove:
+                        st = active_hits.pop(note, None)
+                        if not st:
+                            continue
+
+                        span_key = st["span_key"]
+                        finished_spans.add(span_key)
+
+                        gained = int(round(st["earned"]))
+                        if gained > 0:
+                            graphics.popup_score(note, gained)
+                            graphics.flash_bar(span_key)
 
                     # terminou? (engine ou audio)
                     audio_done = music_started and (not pygame.mixer.music.get_busy())

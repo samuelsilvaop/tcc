@@ -81,7 +81,7 @@ class Graphics:
         self.font_popup = None
 
         # pontuacao
-        self.total_score = 0
+        self.total_score = 0.0
 
         self.refresh_display(force=True)
 
@@ -153,10 +153,14 @@ class Graphics:
                 self.note_xw[n] = (x, bw, True)
 
     def reset_score(self):
-        self.total_score = 0
+        self.total_score = 0.0
         self.key_flash_until.clear()
         self.bar_flash_until.clear()
         self.score_popups.clear()
+
+    def add_score(self, delta: float):
+        """Soma pontos no placar sem criar popup/flash (usado para pontuação contínua)."""
+        self.total_score += float(delta)
 
     def note_name(self, note_number):
         names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -262,6 +266,35 @@ class Graphics:
     def quit(self):
         pygame.quit()
 
+    def flash_bar(self, span_key):
+        now = pygame.time.get_ticks()
+        self.bar_flash_until[span_key] = now + self.flash_ms
+
+    def register_hit_start(self, note: int, span_key):
+        now = pygame.time.get_ticks()
+        self.key_flash_until[note] = now + self.flash_ms
+        self.bar_flash_until[span_key] = now + self.flash_ms
+
+    def popup_score(self, note: int, score: int):
+        now = pygame.time.get_ticks()
+        xw = self.note_xw.get(note)
+        if xw:
+            x, w, _ = xw
+            popup_x = x + w // 2
+            popup_y = (
+                self.screen_height
+                - self.WHITE_KEY_HEIGHT
+                - int(self.WHITE_KEY_HEIGHT * 0.25)
+            )
+            self.score_popups.append(
+                {
+                    "text": f"+{int(score)}",
+                    "x": popup_x,
+                    "y": popup_y,
+                    "until": now + 600,
+                }
+            )
+
     def _draw_bar_fx(self, x: int, y: float, w: int, h: float, base_color):
         y = int(y)
         h = int(h)
@@ -325,31 +358,12 @@ class Graphics:
 
             self._draw_bar_fx(x, y_top, w, height, base_color)
 
-    def register_hit(self, note: int, span_key, score: int):
-        now = pygame.time.get_ticks()
-        self.key_flash_until[note] = now + self.flash_ms
-        self.bar_flash_until[span_key] = now + self.flash_ms
-
-        self.total_score += int(score)
-
-        xw = self.note_xw.get(note)
-        if xw:
-            x, w, _ = xw
-            popup_x = x + w // 2
-            popup_y = (
-                self.screen_height
-                - self.WHITE_KEY_HEIGHT
-                - int(self.WHITE_KEY_HEIGHT * 0.25)
-            )
-            self.score_popups.append(
-                {"text": f"+{score}", "x": popup_x, "y": popup_y, "until": now + 600}
-            )
-
     def _draw_hud(self):
         if not self.font_hud:
             return
 
-        text = f"Pontos: {self.total_score}"
+        score_int = int(round(self.total_score))
+        text = f"Pontos: {score_int}"
         rect = self.font_hud.get_rect(text)
         pad = max(6, int(self.screen_height * 0.008))
         box = pygame.Rect(pad, pad, rect.width + 2 * pad, rect.height + 2 * pad)
@@ -360,7 +374,7 @@ class Graphics:
         )
 
     def show_results_screen(self, song_name: str, max_score: int) -> str:
-        score = int(self.total_score)
+        score = int(round(self.total_score))
         max_score = max(1, int(max_score))
         pct = score / max_score
 
