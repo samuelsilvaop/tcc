@@ -3,7 +3,6 @@ import time
 
 import pygame
 import pygame.freetype
-
 from midi_game.fonts import get_font
 
 BG = (0, 0, 0)

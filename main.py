@@ -86,7 +86,33 @@ def main():
             # Porta MIDI
             pressed_notes: set[int] = set()
             just_pressed: list[int] = []  # notas apertadas desde o último frame
-            port = open_midi_port()
+            from midi_game.midi_warning import show_no_midi_screen
+
+            # Porta MIDI (obrigatória)
+            port = None
+            while port is None:
+                port, ok = open_midi_port()
+
+                if ok:
+                    break
+
+                # mostra aviso na tela (jogador)
+                action = show_no_midi_screen(graphics)
+
+                if action == "menu":
+                    stop_music()
+                    port = None
+                    break
+
+                if action == "quit":
+                    graphics.quit()
+                    raise SystemExit
+
+                # retry -> volta no loop e tenta de novo
+
+            # se voltou ao menu (sem teclado), reinicia o while do menu
+            if port is None:
+                continue
 
             # LiveSynth (som do teclado ao vivo)
             live = (
