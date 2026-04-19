@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import os
+from pathlib import Path
 
 import pygame.mixer
 
 from midi_game.config import load_config
 
-MIDI_FOLDER = "midi_game/assets/midi"
+MIDI_FOLDER = Path(__file__).parent / "assets" / "midi"
 
 
-def play_music(midi_filename, volume: float | None = None):
+def play_music(midi_filename, volume=None):
     base = os.path.splitext(midi_filename)[0]
     ogg_file = os.path.join(MIDI_FOLDER, f"{base}.ogg")
 

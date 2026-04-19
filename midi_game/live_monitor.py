@@ -1,32 +1,47 @@
 # midi_game/live_monitor.py
+from __future__ import annotations
+
 import glob
 import os
+import platform
 import time
+from pathlib import Path
 
 import fluidsynth
 
-SF2_FOLDER = "midi_game/assets/sf2"
+SF2_FOLDER = Path(__file__).parent / "assets" / "sf2"
+
+_LOCAL_APP = os.environ.get("LOCALAPPDATA", "")
 
 SEARCH_PATHS = [
     # projeto
-    os.path.join(SF2_FOLDER, "*.sf2"),
+    str(SF2_FOLDER / "*.sf2"),
     # locais comuns no Linux
     "/usr/share/sounds/sf2/*.sf2",
     "/usr/share/soundfonts/*.sf2",
     os.path.expanduser("~/.soundfonts/*.sf2"),
     os.path.expanduser("~/.local/share/soundfonts/*.sf2"),
-    # macOS (instalações comuns)
+    # macOS
+    "/usr/local/share/soundfonts/*.sf2",
+    "/opt/homebrew/share/soundfonts/*.sf2",
     "/Library/Audio/Sounds/Banks/*.sf2",
     os.path.expanduser("~/Library/Audio/Sounds/Banks/*.sf2"),
-    # Windows (ex.: CoolSoft VirtualMIDISynth SoundFonts)
-    os.path.expanduser("~/AppData/Local/VirtualMIDISynth/*.sf2"),
+    # Windows
+    os.path.join(_LOCAL_APP, "VirtualMIDISynth", "SoundFonts", "*.sf2"),
+    r"C:\soundfonts\*.sf2",
 ]
 
-DRIVERS = ("pulseaudio", "alsa", "sdl2", "coreaudio", "dsound", "portaudio", "jack")
+_SYS = platform.system()
+if _SYS == "Windows":
+    DRIVERS = ("dsound", "portaudio", "sdl2")
+elif _SYS == "Darwin":
+    DRIVERS = ("coreaudio", "portaudio", "sdl2")
+else:
+    DRIVERS = ("pulseaudio", "pipewire", "alsa", "jack", "portaudio", "sdl2")
 
 
 def _find_soundfont():
-    os.makedirs(SF2_FOLDER, exist_ok=True)
+    SF2_FOLDER.mkdir(parents=True, exist_ok=True)
     for pattern in SEARCH_PATHS:
         for path in glob.glob(pattern):
             if os.path.isfile(path):
@@ -88,7 +103,7 @@ def create_live_synth(diagnose_and_test: bool = True, gain: float = 0.5):
     sf2 = _find_soundfont()
     if not sf2:
         print(
-            "⚠️ LiveSynth: nenhum SoundFont (.sf2) encontrado. Coloque um em midi_game/assets/sf2/"
+            f"[AVISO] LiveSynth: nenhum SoundFont (.sf2) encontrado. Coloque um em: {SF2_FOLDER}"
         )
         return None
     try:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 
 from midi_game.midi_loader import load_midi_file, load_midi_note_spans
