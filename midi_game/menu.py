@@ -1,4 +1,6 @@
 # midi_game/menu.py
+from __future__ import annotations
+
 import pygame
 import pygame.freetype
 
@@ -36,7 +38,7 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, float(x)))
 
 
-def _adjust_volume(graphics, title: str, current: float) -> float | None:
+def _adjust_volume(graphics, title: str, current: float):
     """
     Tela simples para ajustar volume [0..1] com ←/→ em passos de 0.05.
     ENTER confirma, ESC cancela (retorna None).
@@ -228,10 +230,6 @@ def _pick_midi_port(graphics):
         return None
     idx = _vertical_menu(graphics, "Escolher porta MIDI", ports, selected_idx=0)
     return ports[idx] if idx is not None else None
-
-
-def _onoff(flag: bool) -> str:
-    return "ON" if flag else "OFF"
 
 
 def _settings_screen(graphics):

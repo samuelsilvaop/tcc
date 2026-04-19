@@ -1,4 +1,6 @@
 # midi_game/midi_input.py
+from __future__ import annotations
+
 import mido
 from midi_game.config import load_config
 

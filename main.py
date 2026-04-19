@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import threading
 import time
 
@@ -10,6 +12,7 @@ from midi_game.graphics import Graphics
 from midi_game.live_monitor import create_live_synth
 from midi_game.menu import run_menu
 from midi_game.midi_input import open_midi_port
+from midi_game.midi_warning import show_no_midi_screen
 from midi_game.sounds import play_music, stop_music
 from midi_game.splash import show_splash
 
@@ -86,7 +89,6 @@ def main():
             # Porta MIDI
             pressed_notes: set[int] = set()
             just_pressed: list[int] = []  # notas apertadas desde o último frame
-            from midi_game.midi_warning import show_no_midi_screen
 
             # Porta MIDI (obrigatória)
             port = None

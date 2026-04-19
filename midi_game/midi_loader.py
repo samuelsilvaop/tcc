@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import os
+from pathlib import Path
 
 import mido
 
-MIDI_FOLDER = "midi_game/assets/midi"
+MIDI_FOLDER = Path(__file__).parent / "assets" / "midi"
 
 
 def list_midi_files():

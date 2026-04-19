@@ -6,15 +6,15 @@ Regras (ordem):
 1) Se já existe .ogg para um .mid, não faz nada.
 2) Procura SoundFont (.sf2) em midi_game/assets/sf2 (repo).
 3) Se não achar, tenta "soundfont_path" no config.json.
-4) Se não achar, procura em caminhos comuns do sistema Linux.
+4) Se não achar, procura em caminhos comuns do sistema (Linux/macOS/Windows).
 5) Se ainda não achar:
    - tenta instalar automaticamente (somente em Linux, e somente se permitido),
      ou imprime instruções claras.
 6) Renderiza MIDI->WAV com fluidsynth CLI e converte WAV->OGG com ffmpeg.
 
 Observações importantes:
-- Para instalar automaticamente, o usuário precisa ter permissões de sudo.
-- Em ambientes sem sudo, o script só orienta.
+- Para instalar automaticamente no Linux, o usuário precisa ter permissões de sudo.
+- Em outros sistemas ou sem sudo, o script só orienta.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ import platform
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from shutil import which
 from typing import Iterable, Optional
 
@@ -31,8 +32,9 @@ import ffmpeg
 
 from midi_game.config import load_config
 
-MIDI_FOLDER = "midi_game/assets/midi"
-SF2_FOLDER = "midi_game/assets/sf2"
+_PKG_DIR = Path(__file__).parent
+MIDI_FOLDER = _PKG_DIR / "assets" / "midi"
+SF2_FOLDER = _PKG_DIR / "assets" / "sf2"
 SAMPLE_RATE = 48000
 
 
@@ -64,11 +66,11 @@ def _print_cmd_error(prefix: str, e: subprocess.CalledProcessError) -> None:
 # -----------------------------
 def _pick_local_soundfont() -> Optional[str]:
     """Retorna o primeiro .sf2 encontrado na pasta do projeto, ou None."""
-    os.makedirs(SF2_FOLDER, exist_ok=True)
+    SF2_FOLDER.mkdir(parents=True, exist_ok=True)
     try:
         for fname in os.listdir(SF2_FOLDER):
             if fname.lower().endswith(".sf2"):
-                return os.path.join(SF2_FOLDER, fname)
+                return str(SF2_FOLDER / fname)
     except FileNotFoundError:
         return None
     return None
@@ -88,27 +90,56 @@ def _pick_config_soundfont() -> Optional[str]:
 
 
 def _common_system_soundfonts() -> Iterable[str]:
-    """
-    Lista de caminhos comuns em Linux.
-    (Manjaro/Arch, Ubuntu/Debian etc.)
-    """
-    candidates = [
-        "/usr/share/soundfonts/FluidR3_GM.sf2",
-        "/usr/share/sounds/sf2/FluidR3_GM.sf2",
-        "/usr/share/soundfonts/default.sf2",
-        "/usr/share/sounds/sf2/default.sf2",
-        "/usr/share/soundfonts/GeneralUser_GS.sf2",
-        "/usr/share/sounds/sf2/GeneralUser_GS.sf2",
-        "/usr/share/soundfonts/TimGM6mb.sf2",
-        "/usr/share/sounds/sf2/TimGM6mb.sf2",
-    ]
-    # também tenta varrer diretórios comuns (se existirem)
-    dirs = [
-        "/usr/share/soundfonts",
-        "/usr/share/sounds/sf2",
-        "/usr/local/share/soundfonts",
-        "/usr/local/share/sounds/sf2",
-    ]
+    """Lista de caminhos comuns em Linux, macOS e Windows."""
+    _sys = platform.system()
+    candidates: list[str] = []
+
+    if _sys == "Linux":
+        candidates = [
+            "/usr/share/soundfonts/FluidR3_GM.sf2",
+            "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+            "/usr/share/soundfonts/default.sf2",
+            "/usr/share/sounds/sf2/default.sf2",
+            "/usr/share/soundfonts/GeneralUser_GS.sf2",
+            "/usr/share/sounds/sf2/GeneralUser_GS.sf2",
+            "/usr/share/soundfonts/TimGM6mb.sf2",
+            "/usr/share/sounds/sf2/TimGM6mb.sf2",
+        ]
+        dirs = [
+            "/usr/share/soundfonts",
+            "/usr/share/sounds/sf2",
+            "/usr/local/share/soundfonts",
+            "/usr/local/share/sounds/sf2",
+        ]
+    elif _sys == "Darwin":
+        candidates = [
+            "/usr/local/share/fluidsynth/GeneralUser.sf2",
+            "/opt/homebrew/share/fluidsynth/GeneralUser.sf2",
+            "/Library/Audio/Sounds/Banks/FluidR3_GM.sf2",
+            os.path.expanduser("~/Library/Audio/Sounds/Banks/FluidR3_GM.sf2"),
+        ]
+        dirs = [
+            "/usr/local/share/soundfonts",
+            "/opt/homebrew/share/soundfonts",
+            "/Library/Audio/Sounds/Banks",
+            os.path.expanduser("~/Library/Audio/Sounds/Banks"),
+        ]
+    elif _sys == "Windows":
+        local_app = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            os.path.join(local_app, "VirtualMIDISynth", "SoundFonts", "FluidR3_GM.sf2"),
+            os.path.join(local_app, "VirtualMIDISynth", "SoundFonts", "GeneralUser.sf2"),
+            r"C:\soundfonts\FluidR3_GM.sf2",
+            r"C:\soundfonts\GeneralUser.sf2",
+        ]
+        dirs = [
+            os.path.join(local_app, "VirtualMIDISynth", "SoundFonts"),
+            r"C:\soundfonts",
+        ]
+    else:
+        candidates = []
+        dirs = []
+
     for d in dirs:
         if os.path.isdir(d):
             try:
@@ -117,8 +148,8 @@ def _common_system_soundfonts() -> Iterable[str]:
                         candidates.append(os.path.join(d, fname))
             except Exception:
                 pass
-    # remove duplicados preservando ordem
-    seen = set()
+
+    seen: set[str] = set()
     for p in candidates:
         if p not in seen:
             seen.add(p)
@@ -260,23 +291,35 @@ def _ensure_tools_or_warn() -> bool:
     """
     Confere dependências externas. Retorna True se ok, False se deve abortar conversão.
     """
+    _sys = platform.system()
     ok = True
+
     if not _has_cmd("fluidsynth"):
-        print("❌ fluidsynth não encontrado. Instale:")
-        if _is_linux() and _has_cmd("pacman"):
+        print("[ERRO] fluidsynth nao encontrado. Instale:")
+        if _sys == "Linux" and _has_cmd("pacman"):
             print("   sudo pacman -S fluidsynth")
-        elif _is_linux() and _has_cmd("apt-get"):
+        elif _sys == "Linux" and _has_cmd("apt-get"):
             print("   sudo apt-get install fluidsynth")
+        elif _sys == "Darwin":
+            print("   brew install fluid-synth")
+        elif _sys == "Windows":
+            print("   winget install FluidSynth.FluidSynth")
+            print("   ou baixe em: https://www.fluidsynth.org/download/")
         else:
             print("   (instale via gerenciador do seu sistema)")
         ok = False
 
     if not _has_cmd("ffmpeg"):
-        print("❌ ffmpeg (binário) não encontrado. Instale:")
-        if _is_linux() and _has_cmd("pacman"):
+        print("[ERRO] ffmpeg nao encontrado. Instale:")
+        if _sys == "Linux" and _has_cmd("pacman"):
             print("   sudo pacman -S ffmpeg")
-        elif _is_linux() and _has_cmd("apt-get"):
+        elif _sys == "Linux" and _has_cmd("apt-get"):
             print("   sudo apt-get install ffmpeg")
+        elif _sys == "Darwin":
+            print("   brew install ffmpeg")
+        elif _sys == "Windows":
+            print("   winget install Gyan.FFmpeg")
+            print("   ou baixe em: https://ffmpeg.org/download.html")
         else:
             print("   (instale via gerenciador do seu sistema)")
         ok = False

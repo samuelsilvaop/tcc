@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import os
+from pathlib import Path
 
-CONFIG_PATH = "midi_game/config.json"
+CONFIG_PATH = Path(__file__).parent / "config.json"
 
 
 DEFAULT_CONFIG = {
