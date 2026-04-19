@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # 1. Verificação de sintaxe Python (sem instalar dependências)
+  #    Roda em todos os SOs e versões de Python suportadas.
+  # ──────────────────────────────────────────────────────────────
+  syntax:
+    name: Sintaxe Python (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Verificar sintaxe (py_compile)
+        run: python -m compileall -q midi_game main.py
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. Instalação completa + importações (Linux)
+  #    Instala dependências do sistema (fluidsynth, ffmpeg) via apt
+  #    e valida que todos os módulos importam corretamente.
+  # ──────────────────────────────────────────────────────────────
+  install-linux:
+    name: Instalacao e Importacoes (Linux)
+    runs-on: ubuntu-latest
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias do sistema
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            fluidsynth ffmpeg libfluidsynth-dev \
+            libasound2-dev libportaudio2
+
+      - name: Instalar dependencias Python
+        run: pip install -r requirements.txt
+
+      - name: Verificar caminhos absolutos (fix cross-platform)
+        run: |
+          python - <<'EOF'
+          from midi_game.config import CONFIG_PATH
+          from midi_game.audio_converter import MIDI_FOLDER, SF2_FOLDER
+          from midi_game.midi_loader import MIDI_FOLDER as ML_FOLDER
+          from midi_game.sounds import MIDI_FOLDER as SND_FOLDER
+          from midi_game.live_monitor import SF2_FOLDER as LM_SF2
+
+          assert CONFIG_PATH.is_absolute(),  f"CONFIG_PATH nao e absoluto: {CONFIG_PATH}"
+          assert MIDI_FOLDER.is_absolute(),   f"audio_converter.MIDI_FOLDER nao e absoluto"
+          assert SF2_FOLDER.is_absolute(),    f"audio_converter.SF2_FOLDER nao e absoluto"
+          assert ML_FOLDER.is_absolute(),     f"midi_loader.MIDI_FOLDER nao e absoluto"
+          assert SND_FOLDER.is_absolute(),    f"sounds.MIDI_FOLDER nao e absoluto"
+          assert LM_SF2.is_absolute(),        f"live_monitor.SF2_FOLDER nao e absoluto"
+
+          print("OK  Todos os caminhos sao absolutos.")
+          EOF
+
+      - name: Verificar importacoes dos modulos
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python - <<'EOF'
+          import sys
+
+          modules = [
+              "midi_game.config",
+              "midi_game.midi_loader",
+              "midi_game.game_engine",
+              "midi_game.audio_converter",
+              "midi_game.sounds",
+              "midi_game.midi_input",
+              "midi_game.live_monitor",
+          ]
+
+          failed = []
+          for mod in modules:
+              try:
+                  __import__(mod)
+                  print(f"OK  {mod}")
+              except Exception as e:
+                  print(f"ERR {mod}: {e}", file=sys.stderr)
+                  failed.append(mod)
+
+          if failed:
+              sys.exit(1)
+          EOF
+
+      - name: Verificar ausencia de funcoes duplicadas (menu.py)
+        run: |
+          python - <<'EOF'
+          import ast, sys
+
+          with open("midi_game/menu.py") as f:
+              tree = ast.parse(f.read())
+
+          names = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+          dups = [n for n in set(names) if names.count(n) > 1]
+          if dups:
+              print(f"ERR funcoes duplicadas: {dups}", file=sys.stderr)
+              sys.exit(1)
+          print("OK  Nenhuma funcao duplicada em menu.py.")
+          EOF
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. Verificação do pip install (Windows e macOS)
+  #    Valida que requirements.txt instala sem erros nessas plataformas.
+  # ──────────────────────────────────────────────────────────────
+  install-other:
+    name: Pip install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: syntax
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias Python
+        run: pip install -r requirements.txt
+
+      - name: Verificar caminhos absolutos (sem dependencias de sistema)
+        run: |
+          python -c "
+          from midi_game.config import CONFIG_PATH
+          from midi_game.midi_loader import MIDI_FOLDER
+          from midi_game.sounds import MIDI_FOLDER as SND
+          assert CONFIG_PATH.is_absolute(), 'CONFIG_PATH nao absoluto'
+          assert MIDI_FOLDER.is_absolute(), 'MIDI_FOLDER nao absoluto'
+          assert SND.is_absolute(), 'sounds.MIDI_FOLDER nao absoluto'
+          print('OK  Caminhos absolutos verificados.')
+          "
