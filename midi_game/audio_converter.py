@@ -303,8 +303,9 @@ def _ensure_tools_or_warn() -> bool:
         elif _sys == "Darwin":
             print("   brew install fluid-synth")
         elif _sys == "Windows":
-            print("   winget install FluidSynth.FluidSynth")
-            print("   ou baixe em: https://www.fluidsynth.org/download/")
+            print("   Nao ha pacote winget oficial para o fluidsynth.")
+            print("   Baixe o build em: https://github.com/FluidSynth/fluidsynth/releases")
+            print("   (ou rode install.bat, que baixa e configura isso automaticamente)")
         else:
             print("   (instale via gerenciador do seu sistema)")
         ok = False

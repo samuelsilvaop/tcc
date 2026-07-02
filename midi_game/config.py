@@ -21,13 +21,27 @@ DEFAULT_CONFIG = {
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
-    with open(CONFIG_PATH, "r") as f:
-        return json.load(f)
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        # config.json corrompido (ex.: processo morto no meio de uma escrita)
+        # travava o jogo inteiro na inicializacao. Restaura os defaults em vez
+        # de propagar a excecao.
+        print(
+            f"[AVISO] {CONFIG_PATH} corrompido ou ilegivel; restaurando padroes."
+        )
+        save_config(DEFAULT_CONFIG)
+        return dict(DEFAULT_CONFIG)
 
 
 def save_config(config):
-    with open(CONFIG_PATH, "w") as f:
+    # escrita atomica: evita deixar o config.json truncado/corrompido se o
+    # processo for encerrado no meio da escrita.
+    tmp_path = f"{CONFIG_PATH}.tmp"
+    with open(tmp_path, "w") as f:
         json.dump(config, f, indent=4)
+    os.replace(tmp_path, CONFIG_PATH)
 
 
 def set_keyboard_keys(n):

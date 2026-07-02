@@ -85,6 +85,7 @@ def main():
 
             # sincronismo (ajuste fino)
             sync_offset = float(cfg.get("sync_offset", 0.0))
+            music_enabled = cfg.get("music_enabled", True)
 
             engine = GameEngine(chosen_midi)
             max_score = engine.get_max_score(max_per_span=MAX_SPAN_SCORE)
@@ -96,6 +97,11 @@ def main():
             # Porta MIDI
             pressed_notes: set[int] = set()
             just_pressed: list[int] = []  # notas apertadas desde o último frame
+            # protege just_pressed: sem isso, um note_on da thread do MIDI
+            # bem entre o "list(just_pressed)" e o "just_pressed.clear()" do
+            # loop principal seria perdido silenciosamente (nunca engataria
+            # o span daquela nota, mesmo com o timing certo).
+            just_pressed_lock = threading.Lock()
 
             # Porta MIDI (obrigatória)
             port = None
@@ -150,7 +156,8 @@ def main():
                     # input do jogo
                     if msg.type == "note_on" and msg.velocity > 0:
                         pressed_notes.add(msg.note)
-                        just_pressed.append(msg.note)
+                        with just_pressed_lock:
+                            just_pressed.append(msg.note)
                     elif msg.type == "note_off" or (
                         msg.type == "note_on" and msg.velocity == 0
                     ):
@@ -182,7 +189,7 @@ def main():
                     # exatamente no instante em que play() foi chamado.
                     pos_ms = (
                         pygame.mixer.music.get_pos()
-                        if music_started and cfg.get("music_enabled", True)
+                        if music_started and music_enabled
                         else -1
                     )
                     if pos_ms >= 0:
@@ -197,14 +204,15 @@ def main():
 
                     # inicia música exatamente quando "tempo 0" chega
                     if (not music_started) and t_engine >= 0:
-                        if cfg.get("music_enabled", True):
+                        if music_enabled:
                             play_music(chosen_midi)
                         music_started = True
 
                     # NOTE_ON -> tenta "engatar" um span
-                    if just_pressed:
+                    with just_pressed_lock:
                         pending = list(just_pressed)
                         just_pressed.clear()
+                    if pending:
                         for note in pending:
                             s, dt = try_hit(note, spans, t_visual)
                             if not s:
@@ -299,7 +307,17 @@ def main():
                             graphics.flash_bar(span_key)
 
                     # terminou? (engine ou audio)
-                    audio_done = music_started and (not pygame.mixer.music.get_busy())
+                    # so' considera o audio pra decidir o fim se ele de fato
+                    # foi tocado -- com music_enabled=False, music_started vira
+                    # True sem nunca chamar play_music(), e get_busy() sempre
+                    # retorna False (nada tocando), o que antes encerrava a
+                    # musica no frame seguinte ao pre-roll, antes do jogador
+                    # conseguir tocar qualquer nota.
+                    audio_done = (
+                        music_started
+                        and music_enabled
+                        and (not pygame.mixer.music.get_busy())
+                    )
                     if engine.is_finished() or audio_done:
                         break
 

@@ -141,9 +141,12 @@ def _music_picker(graphics):
 
 
 # ---------- AJUSTES ----------
-def _pick_keyboard_keys(graphics):
+def _pick_keyboard_keys(graphics, current: int = 61):
     options = ["49", "61", "76", "88"]
-    idx = 1  # default visual em 61
+    try:
+        idx = options.index(str(int(current)))
+    except ValueError:
+        idx = 1  # current nao é um dos presets: cai no default visual (61)
     choice = _vertical_menu(graphics, "Número de teclas", options, idx)
     if choice is None:
         return None
@@ -155,7 +158,7 @@ def _note_name(n):
     return f"{names[n % 12]}{n // 12 - 1}"
 
 
-def _pick_lowest_note(graphics):
+def _pick_lowest_note(graphics, current: int = 36):
     """
     Presets comuns + ajuste fino:
     ←/→ alterna presets, PageUp/PageDown ajusta ±1 semitom.
@@ -171,8 +174,11 @@ def _pick_lowest_note(graphics):
     hint_font = get_font(int(H * 0.03), bold=True)
 
     presets = [21, 33, 36, 48]  # A0, A1, C2, C3 – comuns em 49/61/76/88
-    idx = 2  # C2 como default
-    current = presets[idx]
+    current = int(current)
+    # idx so' e' usado pra saber por qual preset o </-> comeca a ciclar;
+    # 'current' preserva o valor real (inclusive se veio de ajuste fino
+    # PageUp/PageDown que nao caiu em nenhum preset).
+    idx = min(range(len(presets)), key=lambda i: abs(presets[i] - current))
 
     while True:
         for e in pygame.event.get():
@@ -268,12 +274,12 @@ def _settings_screen(graphics):
         selected = choice
 
         if choice == 0:  # número de teclas
-            v = _pick_keyboard_keys(graphics)
+            v = _pick_keyboard_keys(graphics, current=load_config().get("keyboard_keys", 61))
             if v is not None:
                 set_keyboard_keys(v)
 
         elif choice == 1:  # lowest_note
-            v = _pick_lowest_note(graphics)
+            v = _pick_lowest_note(graphics, current=load_config().get("lowest_note", 36))
             if v is not None:
                 set_lowest_note(v)
 

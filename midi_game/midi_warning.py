@@ -2,6 +2,8 @@
 import pygame
 import pygame.freetype
 
+from midi_game.fonts import safe_text
+
 BG = (0, 0, 0)
 FG = (230, 230, 230)
 WARN = (255, 180, 50)
@@ -9,6 +11,7 @@ DIM = (160, 160, 160)
 
 
 def _center(screen, font, text, y, color):
+    text = safe_text(text)
     rect = font.get_rect(text)
     x = (screen.get_width() - rect.width) // 2
     font.render_to(screen, (x, y), text, color)

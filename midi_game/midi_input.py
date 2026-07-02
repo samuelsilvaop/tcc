@@ -70,5 +70,6 @@ def open_midi_port():
     try:
         port = mido.open_input(port_name)
         return port, True
-    except Exception:
+    except Exception as e:
+        print(f"[AVISO] Falha ao abrir porta MIDI '{port_name}': {e}")
         return None, False
