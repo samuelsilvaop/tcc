@@ -30,12 +30,11 @@ def safe_text(text: str) -> str:
     """
     replacements = {
         "🎹": "",  # remove emoji
+        "⚠️": "!",
+        "⚠": "!",
         "➡️": "->",
         "→": "->",
         "•": "-",
-        "♪": "*",  # se não renderizar, vira '*'
-        "♫": "*",
-        "★": "*",
         "▶": ">",
         "⏎": "ENTER",
     }
@@ -43,10 +42,12 @@ def safe_text(text: str) -> str:
         text = text.replace(a, b)
 
     # remove qualquer caractere fora do “básico” que pode quebrar fontes
-    # (mantém acentos comuns)
+    # (mantém acentos comuns e os símbolos musicais/estrela, que as fontes
+    # candidatas em FONT_CANDIDATES sempre suportam)
     allowed = set(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         " áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ"
         " .,:;!?()[]{}<>+-_=/'\"\\|@#$%&*"
+        "♪♫★"
     )
     return "".join(ch if ch in allowed else "" for ch in text)
