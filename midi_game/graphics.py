@@ -77,6 +77,7 @@ class Graphics:
         # efeitos
         self.key_flash_until = {}
         self.bar_flash_until = {}
+        self.bar_miss_until = {}
         self.score_popups = []
         self.font_popup = None
 
@@ -156,6 +157,7 @@ class Graphics:
         self.total_score = 0.0
         self.key_flash_until.clear()
         self.bar_flash_until.clear()
+        self.bar_miss_until.clear()
         self.score_popups.clear()
 
     def add_score(self, delta: float):
@@ -270,12 +272,22 @@ class Graphics:
         now = pygame.time.get_ticks()
         self.bar_flash_until[span_key] = now + self.flash_ms
 
+    def flash_bar_miss(self, span_key):
+        now = pygame.time.get_ticks()
+        self.bar_miss_until[span_key] = now + self.flash_ms
+
     def register_hit_start(self, note: int, span_key):
         now = pygame.time.get_ticks()
         self.key_flash_until[note] = now + self.flash_ms
         self.bar_flash_until[span_key] = now + self.flash_ms
 
     def popup_score(self, note: int, score: int):
+        self._add_popup(note, f"+{int(score)}", (240, 240, 240))
+
+    def popup_miss(self, note: int):
+        self._add_popup(note, "MISS", (255, 90, 90))
+
+    def _add_popup(self, note: int, text: str, color):
         now = pygame.time.get_ticks()
         xw = self.note_xw.get(note)
         if xw:
@@ -288,10 +300,11 @@ class Graphics:
             )
             self.score_popups.append(
                 {
-                    "text": f"+{int(score)}",
+                    "text": text,
                     "x": popup_x,
                     "y": popup_y,
                     "until": now + 600,
+                    "color": color,
                 }
             )
 
@@ -349,10 +362,13 @@ class Graphics:
 
             span_key = (s["note"], s["start"], s["end"])
             now = pygame.time.get_ticks()
-            flash = self.bar_flash_until.get(span_key, 0) > now
+            flash_hit = self.bar_flash_until.get(span_key, 0) > now
+            flash_miss = self.bar_miss_until.get(span_key, 0) > now
 
-            if flash:
+            if flash_hit:
                 base_color = (80, 255, 140)
+            elif flash_miss:
+                base_color = (255, 70, 70)
             else:
                 base_color = _darken(BLUE, 25) if is_black else BLUE
 
@@ -373,7 +389,13 @@ class Graphics:
             self.screen, (box.x + pad, box.y + pad), text, (240, 240, 240)
         )
 
-    def show_results_screen(self, song_name: str, max_score: int) -> str:
+    def show_results_screen(
+        self,
+        song_name: str,
+        max_score: int,
+        best_score: int | None = None,
+        is_new_record: bool = False,
+    ) -> str:
         score = int(round(self.total_score))
         max_score = max(1, int(max_score))
         pct = score / max_score
@@ -391,6 +413,13 @@ class Graphics:
 
         title = "FIM DA MÚSICA"
         score_line = f"{score} / {max_score}  ({round(pct * 100)}%)"
+        if is_new_record:
+            record_line = "NOVO RECORDE!"
+        elif best_score is not None:
+            record_pct = round(100 * best_score / max_score)
+            record_line = f"Recorde: {best_score} / {max_score}  ({record_pct}%)"
+        else:
+            record_line = None
         hint1 = "ENTER = voltar pro menu"
         hint2 = "R = jogar novamente | ESC = sair"
 
@@ -420,6 +449,9 @@ class Graphics:
             y = draw_center(self.font_end_title, title, y)
             y = draw_center(self.font_end_hint, song_name, y, (180, 180, 180))
             y = draw_center(self.font_end_title, score_line, y, (200, 255, 255))
+            if record_line:
+                record_color = (255, 215, 0) if is_new_record else (150, 150, 150)
+                y = draw_center(self.font_end_hint, record_line, y, record_color)
             y = draw_center(self.font_end_hint, msg, y)
             y += int(self.screen_height * 0.05)
             y = draw_center(self.font_end_hint, hint1, y, (180, 180, 180))
@@ -474,7 +506,7 @@ class Graphics:
                 self.screen,
                 (p["x"] - rect.width // 2, y),
                 p["text"],
-                (240, 240, 240),
+                p.get("color", (240, 240, 240)),
             )
             alive.append(p)
 

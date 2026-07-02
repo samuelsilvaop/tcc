@@ -13,6 +13,7 @@ from midi_game.live_monitor import create_live_synth
 from midi_game.menu import run_menu
 from midi_game.midi_input import open_midi_port
 from midi_game.midi_warning import show_no_midi_screen
+from midi_game.save_data import register_score
 from midi_game.sounds import play_music, preload_music, stop_music
 from midi_game.splash import show_splash
 
@@ -183,6 +184,9 @@ def main():
             # evita pontuar 2x o mesmo span
             finished_spans: set[tuple[int, float, float]] = set()
 
+            # spans que passaram do fim sem nunca ter sido engatados (miss)
+            missed_spans: set[tuple[int, float, float]] = set()
+
             # spans "engatados": nota correta pressionada -> acumula pontos proporcional ao tempo segurado
             active_hits: dict[int, dict] = {}  # note -> state
 
@@ -319,6 +323,17 @@ def main():
                             graphics.popup_score(note, gained)
                             graphics.flash_bar(span_key)
 
+                    # spans que passaram do fim sem nunca ter sido engatados
+                    # (nem em active_hits, nem finalizados acima) -> miss total
+                    for s in spans:
+                        span_key = (s["note"], s["start"], s["end"])
+                        if span_key in finished_spans or span_key in missed_spans:
+                            continue
+                        if now_t > s["end"]:
+                            missed_spans.add(span_key)
+                            graphics.popup_miss(s["note"])
+                            graphics.flash_bar_miss(span_key)
+
                     # terminou? (engine ou audio)
                     # so' considera o audio pra decidir o fim se ele de fato
                     # foi tocado -- com music_enabled=False, music_started vira
@@ -344,8 +359,16 @@ def main():
                 stop_music()
 
             # terminou: mostra resultados
+            score = int(round(graphics.total_score))
+            best_score, is_new_record = register_score(
+                chosen_midi, score, max_score
+            )
+
             action = graphics.show_results_screen(
-                song_name=chosen_midi, max_score=max_score
+                song_name=chosen_midi,
+                max_score=max_score,
+                best_score=best_score,
+                is_new_record=is_new_record,
             )
 
             if action == "restart":
