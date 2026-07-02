@@ -1,7 +1,15 @@
 # Makefile - MIDI Hero
 # Funciona em Linux e macOS. Para Windows use install.bat
 
-PYTHON  ?= python3
+# pygame 2.6.1 tem um bug de import circular em Python 3.14+ (ver
+# https://github.com/pygame/pygame/issues/4795), entao evitamos o "python3"
+# do sistema se ele for uma versao mais nova que essa faixa. Pode forcar uma
+# versao especifica com: make PYTHON=python3.12 install
+PY_VERSOES_SUPORTADAS := 3.13 3.12 3.11 3.10 3.9
+PYTHON  ?= $(shell for v in $(PY_VERSOES_SUPORTADAS); do command -v python$$v >/dev/null 2>&1 && { echo python$$v; break; }; done)
+ifeq ($(strip $(PYTHON)),)
+PYTHON := python3
+endif
 VENV    := .venv
 PIP     := $(VENV)/bin/pip
 PYEXEC  := $(VENV)/bin/python
@@ -26,6 +34,12 @@ install: $(VENV)/bin/activate
 	@echo "Para rodar o jogo:  make run"
 
 $(VENV)/bin/activate: requirements.txt
+	@ver=$$($(PYTHON) -c 'import sys; print("%d.%d" % sys.version_info[:2])'); \
+	case " $(PY_VERSOES_SUPORTADAS) " in \
+		*" $$ver "*) : ;; \
+		*) echo "[AVISO] $(PYTHON) e Python $$ver, fora da faixa suportada ($(PY_VERSOES_SUPORTADAS))."; \
+		   echo "        Instale uma dessas versoes e rode: make PYTHON=python3.12 install"; ;; \
+	esac
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt

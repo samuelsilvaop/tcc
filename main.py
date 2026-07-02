@@ -13,7 +13,7 @@ from midi_game.live_monitor import create_live_synth
 from midi_game.menu import run_menu
 from midi_game.midi_input import open_midi_port
 from midi_game.midi_warning import show_no_midi_screen
-from midi_game.sounds import play_music, stop_music
+from midi_game.sounds import play_music, preload_music, stop_music
 from midi_game.splash import show_splash
 
 PRE_ROLL_SECONDS = 2.0  # espera extra após 3-2-1
@@ -69,6 +69,13 @@ def main():
         while True:
             cfg = load_config()
             graphics.refresh_display(force=True)
+
+            # carrega o audio ja aqui (durante o 3-2-1) pra que o play_music()
+            # la na frente so precise dar .play(), sem I/O/decodificacao no
+            # frame exato do gatilho -- isso e o que causava o atraso do
+            # audio em relacao as notas na tela.
+            if cfg.get("music_enabled", True):
+                preload_music(chosen_midi)
 
             if not show_countdown(graphics):
                 app_running = False

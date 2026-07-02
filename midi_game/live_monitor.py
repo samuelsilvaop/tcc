@@ -1,6 +1,7 @@
 # midi_game/live_monitor.py
 from __future__ import annotations
 
+import contextlib
 import glob
 import os
 import platform
@@ -10,6 +11,28 @@ from pathlib import Path
 import fluidsynth
 
 SF2_FOLDER = Path(__file__).parent / "assets" / "sf2"
+
+
+@contextlib.contextmanager
+def _suppress_native_stderr():
+    """O fluidsynth e as libs de audio que ele tenta (ALSA, JACK, ...) escrevem
+    direto no stderr do processo (fd 2) a nivel de C, entao redirect_stderr do
+    Python nao pega -- so segura duplicando o file descriptor de verdade."""
+    try:
+        stderr_fd = 2
+        saved_fd = os.dup(stderr_fd)
+    except OSError:
+        yield  # sem fd de stderr de verdade (ex.: alguns ambientes de teste)
+        return
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, stderr_fd)
+        yield
+    finally:
+        os.dup2(saved_fd, stderr_fd)
+        os.close(devnull_fd)
+        os.close(saved_fd)
+
 
 _LOCAL_APP = os.environ.get("LOCALAPPDATA", "")
 
@@ -50,15 +73,22 @@ def _find_soundfont():
 
 
 def _try_start(fs):
+    # Nao usamos fs.start(): ele sempre cria tambem um driver de entrada MIDI
+    # (new_fluid_midi_driver), e o jogo ja le o teclado MIDI via mido/rtmidi
+    # (midi_input.py) -- isso gerava conflito ("device already in use") ou,
+    # se a gente pedisse midi_driver="none", um erro porque essa build do
+    # fluidsynth nem reconhece "none" como driver valido. Criando so o driver
+    # de audio diretamente, o fluidsynth nunca tenta tocar no dispositivo MIDI.
     last_err = None
     for drv in DRIVERS:
         try:
-            # midi_driver='none': o jogo ja le o teclado MIDI via mido/rtmidi
-            # (midi_input.py); sem isso o fluidsynth tenta abrir o mesmo
-            # dispositivo MIDI e falha com "device already in use".
-            fs.start(driver=drv, midi_driver="none")
-            print(f"🎧 LiveSynth: driver de áudio em uso: {drv}")
-            return drv
+            fs.setting("audio.driver", drv)
+            audio_driver = fluidsynth.new_fluid_audio_driver(fs.settings, fs.synth)
+            if audio_driver:
+                fs.audio_driver = audio_driver
+                print(f"🎧 LiveSynth: driver de áudio em uso: {drv}")
+                return drv
+            last_err = RuntimeError(f"driver '{drv}' nao inicializou")
         except Exception as e:
             last_err = e
     if last_err:
@@ -68,16 +98,22 @@ def _try_start(fs):
 
 class LiveSynth:
     def __init__(self, sf2_path: str, sample_rate: int = 44100, gain: float = 1.5):
-        self.fs = fluidsynth.Synth(samplerate=sample_rate, gain=gain)
-        drv = _try_start(self.fs)
-        if not drv:
-            raise RuntimeError(
-                "Nenhum driver de áudio disponível (pulseaudio/alsa/sdl2/etc)."
-            )
-        self.sfid = self.fs.sfload(sf2_path)
-        if self.sfid < 0:
-            raise RuntimeError(f"Falha ao carregar SoundFont: {sf2_path}")
-        self.fs.program_select(0, self.sfid, 0, 0)
+        # A thread de audio que o fluidsynth sobe tenta ajustar a propria
+        # prioridade de forma assincrona (e loga um aviso se falhar) alguns
+        # instantes DEPOIS que new_fluid_audio_driver retorna -- por isso a
+        # supressao cobre o __init__ inteiro (sfload/program_select ja dao
+        # tempo de sobra pra esse aviso acontecer ainda dentro da janela).
+        with _suppress_native_stderr():
+            self.fs = fluidsynth.Synth(samplerate=sample_rate, gain=gain)
+            drv = _try_start(self.fs)
+            if not drv:
+                raise RuntimeError(
+                    "Nenhum driver de áudio disponível (pulseaudio/alsa/sdl2/etc)."
+                )
+            self.sfid = self.fs.sfload(sf2_path)
+            if self.sfid < 0:
+                raise RuntimeError(f"Falha ao carregar SoundFont: {sf2_path}")
+            self.fs.program_select(0, self.sfid, 0, 0)
         print(f"🎹 LiveSynth: SoundFont em uso: {sf2_path}")
 
     def note_on(self, note: int, velocity: int = 100, ch: int = 0):
