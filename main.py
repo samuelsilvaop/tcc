@@ -174,8 +174,21 @@ def main():
                     # tempo real do engine (pode ser negativo durante pré-roll)
                     t_engine = engine.get_current_time()
 
-                    # tempo visual com offset (para acertar sincronia)
-                    t_visual = t_engine + sync_offset
+                    # Uma vez que a musica comecou, usamos o relogio de
+                    # playback real do mixer (get_pos(), em ms desde o play())
+                    # em vez do relogio de parede (time.time()) -- assim a
+                    # sincronia reflete a latencia de audio de verdade do
+                    # driver/SO em uso, em vez de so assumir que o som comecou
+                    # exatamente no instante em que play() foi chamado.
+                    pos_ms = (
+                        pygame.mixer.music.get_pos()
+                        if music_started and cfg.get("music_enabled", True)
+                        else -1
+                    )
+                    if pos_ms >= 0:
+                        t_visual = (pos_ms / 1000.0) + sync_offset
+                    else:
+                        t_visual = t_engine + sync_offset
 
                     spans = engine.get_visible_spans(
                         t_visual, window_ahead=8.0, window_behind=1.0
