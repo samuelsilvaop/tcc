@@ -8,3 +8,6 @@ venv/
 
 # SoundFonts (grandes)
 midi_game/assets/sf2/*.sf2
+
+# fluidsynth baixado pelo install.bat (Windows)
+tools/fluidsynth/

@@ -116,27 +116,46 @@ echo.
 echo === Dependencias Python instaladas com sucesso! ===
 echo.
 
-REM ---- fluidsynth e ffmpeg: instala via winget se nao estiverem no PATH ----
+REM ---- fluidsynth: nao existe pacote winget oficial pra isso, entao baixamos o
+REM build oficial (zip autocontido, sem instalador) do GitHub Releases e
+REM extraimos dentro do proprio projeto, em tools\fluidsynth\bin.
 set "PRECISA_REABRIR_TERMINAL="
+set "FLUIDSYNTH_DIR=tools\fluidsynth"
+set "FLUIDSYNTH_ZIP_URL=https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.5/fluidsynth-v2.5.5-win10-x64-cpp11.zip"
 
 where fluidsynth >nul 2>&1
-if errorlevel 1 (
-    echo [AVISO] fluidsynth nao encontrado no PATH.
-    where winget >nul 2>&1
-    if not errorlevel 1 (
-        echo Instalando fluidsynth via winget...
-        winget install --id FluidSynth.FluidSynth -e --silent --accept-source-agreements --accept-package-agreements
-        if not errorlevel 1 (
-            echo [OK] fluidsynth instalado.
-            set "PRECISA_REABRIR_TERMINAL=1"
-        ) else (
-            echo [ERRO] Falha ao instalar fluidsynth via winget.
-        )
-    ) else (
-        echo [ERRO] winget indisponivel para instalar o fluidsynth.
-    )
+if not errorlevel 1 (
+    echo [OK] fluidsynth encontrado no PATH.
+) else if exist "%FLUIDSYNTH_DIR%\bin\fluidsynth.exe" (
+    echo [OK] fluidsynth ja baixado em %FLUIDSYNTH_DIR%.
 ) else (
-    echo [OK] fluidsynth encontrado.
+    echo [AVISO] fluidsynth nao encontrado. Baixando build oficial...
+    set "FLUIDSYNTH_ZIP=%TEMP%\fluidsynth.zip"
+    where curl >nul 2>&1
+    if not errorlevel 1 (
+        curl -L -o "!FLUIDSYNTH_ZIP!" "%FLUIDSYNTH_ZIP_URL%"
+    ) else (
+        powershell -NoProfile -Command "Invoke-WebRequest -Uri '%FLUIDSYNTH_ZIP_URL%' -OutFile '!FLUIDSYNTH_ZIP!'"
+    )
+    if exist "!FLUIDSYNTH_ZIP!" (
+        if exist "%FLUIDSYNTH_DIR%_tmp" rmdir /s /q "%FLUIDSYNTH_DIR%_tmp"
+        powershell -NoProfile -Command "Expand-Archive -Path '!FLUIDSYNTH_ZIP!' -DestinationPath '%FLUIDSYNTH_DIR%_tmp' -Force"
+        set "FS_EXTRAIDO="
+        for /d %%D in ("%FLUIDSYNTH_DIR%_tmp\*") do set "FS_EXTRAIDO=%%D"
+        if defined FS_EXTRAIDO (
+            if exist "%FLUIDSYNTH_DIR%" rmdir /s /q "%FLUIDSYNTH_DIR%"
+            move "!FS_EXTRAIDO!" "%FLUIDSYNTH_DIR%" >nul
+        )
+        rmdir /s /q "%FLUIDSYNTH_DIR%_tmp" 2>nul
+        del /q "!FLUIDSYNTH_ZIP!" 2>nul
+    )
+    if exist "%FLUIDSYNTH_DIR%\bin\fluidsynth.exe" (
+        echo [OK] fluidsynth baixado com sucesso em %FLUIDSYNTH_DIR%.
+    ) else (
+        echo [ERRO] Falha ao baixar/extrair o fluidsynth automaticamente.
+        echo        Baixe manualmente em: https://github.com/FluidSynth/fluidsynth/releases
+        echo        e extraia de forma que exista: %FLUIDSYNTH_DIR%\bin\fluidsynth.exe
+    )
 )
 
 where ffmpeg >nul 2>&1
@@ -187,13 +206,13 @@ if not errorlevel 1 (
 
 echo.
 where fluidsynth >nul 2>&1
-if errorlevel 1 echo [PENDENTE] fluidsynth: instale manualmente -^> https://www.fluidsynth.org/download/ ^(e adicione ao PATH^)
+if errorlevel 1 if not exist "%FLUIDSYNTH_DIR%\bin\fluidsynth.exe" echo [PENDENTE] fluidsynth: instale manualmente -^> https://github.com/FluidSynth/fluidsynth/releases
 where ffmpeg >nul 2>&1
 if errorlevel 1 echo [PENDENTE] ffmpeg: instale manualmente -^> https://ffmpeg.org/download.html ^(e adicione ao PATH^)
 
 if defined PRECISA_REABRIR_TERMINAL (
     echo.
-    echo [IMPORTANTE] fluidsynth e/ou ffmpeg foram instalados agora.
+    echo [IMPORTANTE] ffmpeg foi instalado agora via winget.
     echo              Feche este terminal e abra um novo antes de rodar o jogo,
     echo              para o PATH atualizar.
 )
