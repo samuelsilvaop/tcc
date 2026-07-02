@@ -53,7 +53,10 @@ def _try_start(fs):
     last_err = None
     for drv in DRIVERS:
         try:
-            fs.start(driver=drv)
+            # midi_driver='none': o jogo ja le o teclado MIDI via mido/rtmidi
+            # (midi_input.py); sem isso o fluidsynth tenta abrir o mesmo
+            # dispositivo MIDI e falha com "device already in use".
+            fs.start(driver=drv, midi_driver="none")
             print(f"🎧 LiveSynth: driver de áudio em uso: {drv}")
             return drv
         except Exception as e:

@@ -116,6 +116,28 @@ echo.
 echo === Dependencias Python instaladas com sucesso! ===
 echo.
 
+REM ---- Visual C++ Redistributable: dependencia nativa de extensoes compiladas
+REM como o python-rtmidi. Sem isso, "import rtmidi" quebra com "DLL load failed".
+if not exist "%WINDIR%\System32\vcruntime140.dll" (
+    echo [AVISO] Microsoft Visual C++ Redistributable nao encontrado.
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo Instalando Visual C++ Redistributable via winget...
+        winget install --id Microsoft.VCRedist.2015+.x64 -e --silent --accept-source-agreements --accept-package-agreements
+        if not errorlevel 1 (
+            echo [OK] Visual C++ Redistributable instalado.
+        ) else (
+            echo [ERRO] Falha ao instalar via winget.
+            echo        Baixe manualmente em: https://aka.ms/vs/17/release/vc_redist.x64.exe
+        )
+    ) else (
+        echo [ERRO] winget indisponivel para instalar o Visual C++ Redistributable.
+        echo        Baixe manualmente em: https://aka.ms/vs/17/release/vc_redist.x64.exe
+    )
+) else (
+    echo [OK] Visual C++ Redistributable encontrado.
+)
+
 REM ---- fluidsynth: nao existe pacote winget oficial pra isso, entao baixamos o
 REM build oficial (zip autocontido, sem instalador) do GitHub Releases e
 REM extraimos dentro do proprio projeto, em tools\fluidsynth\bin.
