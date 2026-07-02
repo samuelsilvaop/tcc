@@ -170,9 +170,11 @@ class Graphics:
         octave = note_number // 12 - 1
         return f"{name}{octave}"
 
-    def draw_keyboard(self, pressed_notes=None):
+    def draw_keyboard(self, pressed_notes=None, wrong_notes=None):
         if pressed_notes is None:
             pressed_notes = []
+        if wrong_notes is None:
+            wrong_notes = ()
 
         # brancas
         for i, note in enumerate(self.white_notes):
@@ -183,6 +185,8 @@ class Graphics:
 
             if flash:
                 color = (255, 255, 120)
+            elif note in wrong_notes:
+                color = RED
             else:
                 color = GREEN if note in pressed_notes else WHITE
 
@@ -229,8 +233,10 @@ class Graphics:
 
                 if flash:
                     color = (255, 200, 80)
+                elif black_note in wrong_notes:
+                    color = RED
                 else:
-                    color = RED if black_note in pressed_notes else BLACK
+                    color = GREEN if black_note in pressed_notes else BLACK
 
                 pygame.draw.rect(
                     self.screen,
@@ -460,7 +466,7 @@ class Graphics:
             pygame.display.flip()
             clock.tick(FPS)
 
-    def update_bars(self, visible_spans, current_time, pressed_notes):
+    def update_bars(self, visible_spans, current_time, pressed_notes, wrong_notes=None):
         self.screen.fill(BLACK)
 
         self.draw_note_bars_upwards(visible_spans, current_time)
@@ -478,7 +484,7 @@ class Graphics:
             self.screen, (60, 60, 60), (0, y + 2), (self.screen_width, y + 2), 1
         )
 
-        self.draw_keyboard(pressed_notes)
+        self.draw_keyboard(pressed_notes, wrong_notes)
         self.draw_popups()
 
         # HUD por cima

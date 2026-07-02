@@ -187,6 +187,11 @@ def main():
             # spans que passaram do fim sem nunca ter sido engatados (miss)
             missed_spans: set[tuple[int, float, float]] = set()
 
+            # notas fisicamente seguradas que não correspondem a nenhum span
+            # engatável no momento (tecla errada) -- usado só pro feedback
+            # visual do teclado, some assim que a tecla é solta
+            wrong_notes: set[int] = set()
+
             # spans "engatados": nota correta pressionada -> acumula pontos proporcional ao tempo segurado
             active_hits: dict[int, dict] = {}  # note -> state
 
@@ -217,7 +222,7 @@ def main():
                     spans = engine.get_visible_spans(
                         t_visual, window_ahead=8.0, window_behind=1.0
                     )
-                    graphics.update_bars(spans, t_visual, pressed_notes)
+                    graphics.update_bars(spans, t_visual, pressed_notes, wrong_notes)
 
                     # inicia música exatamente quando "tempo 0" chega
                     if (not music_started) and t_engine >= 0:
@@ -233,6 +238,7 @@ def main():
                         for note in pending:
                             s, dt = try_hit(note, spans, t_visual)
                             if not s:
+                                wrong_notes.add(note)
                                 continue
 
                             span_key = (s["note"], s["start"], s["end"])
@@ -245,6 +251,8 @@ def main():
                                 and active_hits[note].get("span_key") == span_key
                             ):
                                 continue
+
+                            wrong_notes.discard(note)
 
                             quality = _timing_multiplier(float(dt))
                             rate = engine.get_span_points_rate(
@@ -273,6 +281,9 @@ def main():
 
                             # feedback visual do engate (sem pontuar aqui)
                             graphics.register_hit_start(note, span_key)
+
+                    # solta a tecla -> some o destaque de erro
+                    wrong_notes &= pressed_notes
 
                     # acumula pontos por frame para spans engatados
                     now_t = float(t_visual)
