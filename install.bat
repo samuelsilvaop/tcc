@@ -7,11 +7,11 @@ echo === MIDI Hero - Instalador Windows ===
 echo.
 
 REM ---- Faixa de versoes de Python compativeis com as dependencias (requirements.txt) ----
-REM Hoje a restricao vem do pygame, que ainda nao publica wheels prontos fora desta
-REM faixa (versoes mais novas do Python obrigam o pip a compilar do zero, o que costuma
-REM falhar por falta do SDL2/toolchain). Se uma dependencia futura exigir outra faixa,
-REM so ajustar as duas linhas abaixo -- o resto do script se adapta sozinho.
-set "PY_VERSOES_SUPORTADAS=3.13 3.12 3.11 3.10 3.9"
+REM Hoje quem trava a faixa e o python-rtmidi, que so publica wheel pronto pro Windows
+REM ate o Python 3.12 (nada de cp313 ainda). Fora dessa faixa o pip cai pra compilar do
+REM zero e falha sem Visual Studio Build Tools instalado. Se uma dependencia futura
+REM mudar essa faixa, so ajustar as duas linhas abaixo -- o resto do script se adapta.
+set "PY_VERSOES_SUPORTADAS=3.12 3.11 3.10 3.9"
 set "PY_RECOMENDADA=3.12"
 
 set "PY_CMD="
@@ -115,21 +115,89 @@ if errorlevel 1 (
 echo.
 echo === Dependencias Python instaladas com sucesso! ===
 echo.
-echo IMPORTANTE: Voce ainda precisa instalar manualmente:
+
+REM ---- fluidsynth e ffmpeg: instala via winget se nao estiverem no PATH ----
+set "PRECISA_REABRIR_TERMINAL="
+
+where fluidsynth >nul 2>&1
+if errorlevel 1 (
+    echo [AVISO] fluidsynth nao encontrado no PATH.
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo Instalando fluidsynth via winget...
+        winget install --id FluidSynth.FluidSynth -e --silent --accept-source-agreements --accept-package-agreements
+        if not errorlevel 1 (
+            echo [OK] fluidsynth instalado.
+            set "PRECISA_REABRIR_TERMINAL=1"
+        ) else (
+            echo [ERRO] Falha ao instalar fluidsynth via winget.
+        )
+    ) else (
+        echo [ERRO] winget indisponivel para instalar o fluidsynth.
+    )
+) else (
+    echo [OK] fluidsynth encontrado.
+)
+
+where ffmpeg >nul 2>&1
+if errorlevel 1 (
+    echo [AVISO] ffmpeg nao encontrado no PATH.
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo Instalando ffmpeg via winget...
+        winget install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements
+        if not errorlevel 1 (
+            echo [OK] ffmpeg instalado.
+            set "PRECISA_REABRIR_TERMINAL=1"
+        ) else (
+            echo [ERRO] Falha ao instalar ffmpeg via winget.
+        )
+    ) else (
+        echo [ERRO] winget indisponivel para instalar o ffmpeg.
+    )
+) else (
+    echo [OK] ffmpeg encontrado.
+)
+
+REM ---- SoundFont (.sf2): baixa o TimGM6mb (~6MB) se a pasta nao tiver nenhum ----
+set "SF2_DIR=midi_game\assets\sf2"
+set "SF2_URL=https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2"
+
+dir /b "%SF2_DIR%\*.sf2" >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] SoundFont ja presente em %SF2_DIR%.
+) else (
+    echo [AVISO] Nenhum SoundFont ^(.sf2^) encontrado em %SF2_DIR%.
+    echo Baixando TimGM6mb.sf2 ^(~6MB, SoundFont GM leve^)...
+    if not exist "%SF2_DIR%" mkdir "%SF2_DIR%"
+    where curl >nul 2>&1
+    if not errorlevel 1 (
+        curl -L -o "%SF2_DIR%\TimGM6mb.sf2" "%SF2_URL%"
+    ) else (
+        powershell -NoProfile -Command "Invoke-WebRequest -Uri '%SF2_URL%' -OutFile '%SF2_DIR%\TimGM6mb.sf2'"
+    )
+    if exist "%SF2_DIR%\TimGM6mb.sf2" (
+        echo [OK] SoundFont baixado com sucesso.
+    ) else (
+        echo [ERRO] Falha ao baixar o SoundFont automaticamente.
+        echo        Baixe manualmente e coloque em: %SF2_DIR%
+        echo        Sugestao: TimGM6mb.sf2 ou FluidR3_GM.sf2
+    )
+)
+
 echo.
-echo   1) fluidsynth:
-echo      winget install FluidSynth.FluidSynth
-echo      ou: https://www.fluidsynth.org/download/
-echo      Adicione o diretorio do fluidsynth ao PATH do sistema.
-echo.
-echo   2) ffmpeg:
-echo      winget install Gyan.FFmpeg
-echo      ou: https://ffmpeg.org/download.html
-echo      Adicione o diretorio do ffmpeg ao PATH do sistema.
-echo.
-echo   3) SoundFont (.sf2):
-echo      Coloque um arquivo .sf2 em: midi_game\assets\sf2\
-echo      Sugestao: FluidR3_GM.sf2 (busque online por "FluidR3_GM.sf2 download")
+where fluidsynth >nul 2>&1
+if errorlevel 1 echo [PENDENTE] fluidsynth: instale manualmente -^> https://www.fluidsynth.org/download/ ^(e adicione ao PATH^)
+where ffmpeg >nul 2>&1
+if errorlevel 1 echo [PENDENTE] ffmpeg: instale manualmente -^> https://ffmpeg.org/download.html ^(e adicione ao PATH^)
+
+if defined PRECISA_REABRIR_TERMINAL (
+    echo.
+    echo [IMPORTANTE] fluidsynth e/ou ffmpeg foram instalados agora.
+    echo              Feche este terminal e abra um novo antes de rodar o jogo,
+    echo              para o PATH atualizar.
+)
+
 echo.
 echo Para rodar o jogo, execute: run.bat
 echo.
