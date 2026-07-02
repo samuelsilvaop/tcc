@@ -17,30 +17,43 @@ from midi_game.sounds import play_music, preload_music, stop_music
 from midi_game.splash import show_splash
 
 PRE_ROLL_SECONDS = 2.0  # espera extra após 3-2-1
-HIT_WINDOW = 0.08  # 80ms de tolerância para "engatar" a nota
+HIT_WINDOW = 0.08  # 80ms de tolerância para engatar a nota *antes* do início dela
 MAX_SPAN_SCORE = (
     100  # pontos máximos por span quando segurou 100% do tempo (sem penalidade)
 )
 
 
 def try_hit(note: int, visible_spans: list[dict], current_time: float):
-    """Encontra o span mais próximo (da mesma nota) e verifica se está dentro do HIT_WINDOW."""
+    """Encontra o span mais próximo (da mesma nota) que ainda pode ser engatado.
+
+    O engate pode acontecer um pouco antes do início (tolerância HIT_WINDOW) ou
+    a qualquer momento durante a duração da nota (engate tardio: os pontos são
+    contados só a partir do aperto, proporcional ao tempo restante do span, com
+    a pior faixa de qualidade de `_timing_multiplier`). Não é possível engatar
+    depois que a nota já terminou.
+    """
     best = None
     best_dt = float("inf")
     for s in visible_spans:
         if s["note"] != note:
             continue
+        if current_time > s["end"] or current_time < s["start"] - HIT_WINDOW:
+            continue
         dt = abs(s["start"] - current_time)
         if dt < best_dt:
             best_dt = dt
             best = s
-    if best and best_dt <= HIT_WINDOW:
+    if best is not None:
         return best, best_dt
     return None, None
 
 
 def _timing_multiplier(dt: float) -> float:
-    """Penalidade por timing no momento do engate (note_on)."""
+    """Penalidade por timing no momento do engate (note_on).
+
+    `dt` é a distância (em segundos, sempre >= 0) entre o aperto e o início da
+    nota. Engates tardios (fora da janela de 80ms) sempre caem na pior faixa.
+    """
     if dt < 0.03:
         return 1.0
     if dt < 0.06:
