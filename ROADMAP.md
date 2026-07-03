@@ -14,6 +14,27 @@ Permitir ajustar a velocidade de reprodução de uma música (ex.: 0.75x, 1.0x, 
   2. Alternativa mais simples (mas com trade-off sonoro): tocar o áudio original em velocidade alterada via mudança de sample rate, o que também muda o tom (fica "esganiçado" ou "grave" dependendo da direção) — ou simplesmente mutar o áudio nesse modo (modo prática silencioso).
 - **UI**: adicionar seletor de velocidade no menu (`midi_game/menu.py`) e persistir a escolha em `config.json`.
 
+## Pendências de CI/segurança (deixar por último)
+
+Levantadas na revisão do PR #4 (Dependabot, bump das GitHub Actions, 2026-07-03).
+O PR em si está ok (bumps pinados por SHA, CI funcional verde), mas ficou
+combinado resolver este bloco por último:
+
+1. **Mergear o PR #4** e, junto/logo em seguida, ajustar o `security.yml`:
+   - **gitleaks v3 (breaking change)**: adicionar `GITHUB_TOKEN:
+     ${{ secrets.GITHUB_TOKEN }}` no `env` do step do Gitleaks — a v3 passou a
+     exigir o token para escanear pull requests; sem isso o `secret-scan`
+     falha em todo PR.
+   - **osv-scanner**: remover `--skip-git` dos `scan-args` — a v2.3.8 não
+     aceita essa flag (`flag provided but not defined`), o job `deps-vuln` já
+     falha na main por isso (pré-existente, não é culpa do PR).
+2. **`sast` (CodeQL) e `dependency-review`**: falham porque o repo é privado —
+   upload de code scanning e dependency review exigem GitHub Advanced
+   Security em repo privado. Decidir entre:
+   - tornar o repo **público** (aí os dois passam a funcionar de graça); ou
+   - condicionar/desativar esses dois jobs enquanto o repo for privado, para
+     o check agregado `security` parar de ficar vermelho.
+
 ## Melhorias futuras (trabalhos futuros / sugestões de continuidade)
 
 Levantadas na revisão geral do código (2026-07-02). Não são bugs — são pontos de arquitetura/escopo que ficam de fora do projeto atual mas são boas sugestões de continuidade para um TCC futuro:
