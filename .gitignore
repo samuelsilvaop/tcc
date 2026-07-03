@@ -14,3 +14,6 @@ tools/fluidsynth/
 
 midi_game/save_data.json
 midi_game/config.json
+
+# Monografia (TCC em LaTeX) - não precisa estar no GitHub
+monografia/
