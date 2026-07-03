@@ -1,0 +1,237 @@
+# Security baseline - CI de seguranca inteligente.
+# Um unico job `detect` inspeciona o repo e liga/desliga os demais jobs.
+# Hoje este projeto e Python puro (sem Docker/Terraform/Node) - os jobs de
+# container e IaC ficam pulados automaticamente; se um Dockerfile ou .tf
+# forem adicionados no futuro, os scans correspondentes ligam sozinhos,
+# sem precisar editar este arquivo.
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Menor privilegio por padrao; cada job eleva so o que precisa.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detecta a stack presente no repositorio e exporta flags para os outros jobs.
+  # ---------------------------------------------------------------------------
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.f.outputs.node }}
+      python: ${{ steps.f.outputs.python }}
+      go: ${{ steps.f.outputs.go }}
+      app: ${{ steps.f.outputs.app }}
+      lockfile: ${{ steps.f.outputs.lockfile }}
+      iac: ${{ steps.f.outputs.iac }}
+      docker: ${{ steps.f.outputs.docker }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - id: f
+        shell: bash
+        run: |
+          set -euo pipefail
+          has() { [ -n "$(find . -path ./.git -prune -o -type f \( "$@" \) -print -quit)" ] && echo true || echo false; }
+
+          NODE=$(has -name package.json)
+          PY=$(has -name pyproject.toml -o -name requirements.txt -o -name setup.py -o -name Pipfile)
+          GO=$(has -name go.mod)
+          DOCKER=$(has -name Dockerfile -o -name Containerfile -o -name '*.Dockerfile')
+          IAC=$(has -name '*.tf' -o -name Chart.yaml -o -name kustomization.yaml -o -name kustomization.yml)
+          # requirements.txt conta como "lockfile" aqui: este projeto usa pip
+          # puro (sem poetry/uv) e o requirements.txt e pinado por versao exata.
+          LOCK=$(has -name package-lock.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name poetry.lock -o -name uv.lock -o -name Pipfile.lock -o -name go.sum -o -name requirements.txt)
+
+          APP=false
+          { [ "$NODE" = true ] || [ "$PY" = true ] || [ "$GO" = true ]; } && APP=true
+
+          {
+            echo "node=$NODE"; echo "python=$PY"; echo "go=$GO";
+            echo "docker=$DOCKER"; echo "iac=$IAC"; echo "lockfile=$LOCK"; echo "app=$APP";
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # SEMPRE: secret scanning. Vazou segredo = barra o build.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  # ---------------------------------------------------------------------------
+  # SEMPRE (em PR): revisao de dependencias adicionadas no diff.
+  # ---------------------------------------------------------------------------
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          # Bloqueia licencas copyleft fortes por padrao; ajuste se precisar.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  # ---------------------------------------------------------------------------
+  # SAST: so se houver codigo de aplicacao.
+  # ---------------------------------------------------------------------------
+  sast:
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: github/codeql-action/init@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3.36.3
+        with:
+          languages: ${{ needs.detect.outputs.node == 'true' && 'javascript-typescript' || '' }}${{ needs.detect.outputs.python == 'true' && ' python' || '' }}${{ needs.detect.outputs.go == 'true' && ' go' || '' }}
+      - uses: github/codeql-action/analyze@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3.36.3
+
+  # ---------------------------------------------------------------------------
+  # Vulnerabilidades em dependencias: so se houver lockfile.
+  # ---------------------------------------------------------------------------
+  deps-vuln:
+    needs: detect
+    if: needs.detect.outputs.lockfile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: osv-scanner
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            --skip-git
+            ./
+
+  # ---------------------------------------------------------------------------
+  # IaC: so se houver Terraform / Helm / Kustomize / manifests.
+  # ---------------------------------------------------------------------------
+  iac-scan:
+    needs: detect
+    if: needs.detect.outputs.iac == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@a7683e7b72a04503521247973281ec8142e1ac1f # v12
+        with:
+          directory: .
+          quiet: true
+          soft_fail: false # bloqueante
+      - name: kube-linter
+        uses: stackrox/kube-linter-action@87802a2f4e01abebb3ee3c67a3002fea71f6eae5 # v1.0.7
+        continue-on-error: true # so roda util se houver manifests; nao derruba IaC pura
+
+  # ---------------------------------------------------------------------------
+  # Container: so se houver Dockerfile.
+  # ---------------------------------------------------------------------------
+  container-scan:
+    needs: detect
+    if: needs.detect.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Hadolint (lint do Dockerfile)
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: Dockerfile
+      - name: Trivy (filesystem - config + deps + segredos na imagem)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1" # bloqueante
+          ignore-unfixed: true
+
+  # ---------------------------------------------------------------------------
+  # Licencas: so se houver lockfile de Node/Python.
+  # ---------------------------------------------------------------------------
+  license-check:
+    needs: detect
+    if: needs.detect.outputs.lockfile == 'true' && (needs.detect.outputs.node == 'true' || needs.detect.outputs.python == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Trivy license scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: license
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  # ---------------------------------------------------------------------------
+  # LGPD: heuristica de PII. Reporta (nao bloqueia por falso positivo), mas
+  # PII confirmada hardcoded deve ser tratada como bug. Este projeto e um jogo
+  # local single-player (sem cadastro/rede) - nao esperamos achados aqui.
+  # ---------------------------------------------------------------------------
+  lgpd-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Heuristica de PII em codigo
+        shell: bash
+        run: |
+          set -uo pipefail
+          # CPF (xxx.xxx.xxx-xx), e-mail e cartao de credito hardcoded.
+          PATTERN='([0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})|([0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4})'
+          HITS=$(grep -rInE "$PATTERN" --include='*.*' \
+            --exclude-dir={.git,node_modules,vendor,dist,build,.venv} . || true)
+          if [ -n "$HITS" ]; then
+            echo "::warning::Possivel PII hardcoded (CPF/cartao). Revise - nao logue/commite dado pessoal cru:"
+            echo "$HITS"
+          else
+            echo "Nenhuma PII obvia encontrada pela heuristica."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Gate agregador: e ESTE o check exigido na branch protection.
+  # Falha se qualquer job obrigatorio falhou.
+  # ---------------------------------------------------------------------------
+  security:
+    if: always()
+    needs:
+      - secret-scan
+      - dependency-review
+      - sast
+      - deps-vuln
+      - iac-scan
+      - container-scan
+      - license-check
+      - lgpd-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verifica resultado dos jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Jobs 'skipped' (stack nao presente) sao OK. 'failure'/'cancelled' barram.
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "Resultados: $results"
+          for r in $results; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::Gate de seguranca falhou (job com resultado '$r')."
+              exit 1
+            fi
+          done
+          echo "Gate de seguranca OK."

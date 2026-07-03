@@ -1,0 +1,19 @@
+# Config do Gitleaks. Estende as regras nativas e adiciona allowlist de falsos
+# positivos do projeto. NAO use allowlist pra esconder segredo real - rotacione-o.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Falsos positivos conhecidos deste repo"
+paths = [
+  '''(.*/)?\.env\.example$''',
+  '''(.*/)?tests?/fixtures/.*''',
+  '''(.*/)?testdata/.*''',
+  '''(.*/)?.*\.snap$''',
+]
+# Regexes de exemplos/placeholders que nao sao segredos reais.
+regexes = [
+  '''EXAMPLE_[A-Z0-9_]+''',
+  '''your[-_]?(api[-_]?)?key[-_]?here''',
+  '''xxxx+''',
+]

@@ -1,0 +1,22 @@
+# Mantem as dependencias e as GitHub Actions atualizadas via PR revisado.
+version: 2
+updates:
+  # GitHub Actions - mantem a pinagem por SHA atualizada (o comentario com a
+  # tag legivel e atualizado junto).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Python (requirements.txt).
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies"]

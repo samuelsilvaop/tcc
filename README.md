@@ -22,7 +22,8 @@ detalhes de arquitetura, decisões de projeto e ideias de continuidade.
 > para Windows até o Python 3.12 (sem isso, o `pip install` cai para compilar
 > do zero e falha sem as Build Tools do Visual Studio). No Linux/macOS, o
 > `pygame` 2.6.1 tem um bug de import circular em Python 3.14+. Por isso o
-> instalador prioriza automaticamente uma versão dentro dessa faixa.
+> instalador prioriza automaticamente uma versão dentro dessa faixa, e se
+> nenhuma estiver instalada ele se oferece para instalar uma (ver abaixo).
 
 ## Instalação
 
@@ -44,20 +45,24 @@ projeto, em `tools/fluidsynth/`. O SoundFont é baixado automaticamente.
 make install
 ```
 
-Cria o ambiente virtual (`.venv`) e instala as dependências Python. As
-ferramentas de sistema (FluidSynth e ffmpeg) **não são instaladas
-automaticamente** — o comando mostra o comando certo para o seu gerenciador
-de pacotes (`pacman`, `apt`, `dnf` ou `brew`):
+Cria o ambiente virtual (`.venv`) e instala as dependências Python. Também
+verifica as dependências de sistema e se oferece para instalar
+automaticamente o que faltar — **cada instalação pede confirmação antes de
+agir** (nada é instalado sem você autorizar):
 
-```
-sudo pacman -S fluidsynth ffmpeg      # Arch/Manjaro
-sudo apt-get install fluidsynth ffmpeg # Debian/Ubuntu
-sudo dnf install fluidsynth ffmpeg     # Fedora
-brew install fluid-synth ffmpeg        # macOS
-```
+- **Homebrew** (só no macOS, se ainda não estiver instalado).
+- **Python** numa versão compatível (3.9–3.13), via `brew`/`apt`/`dnf`/`pacman`,
+  caso nenhuma já esteja presente no sistema.
+- **FluidSynth** e **ffmpeg**, via o gerenciador de pacotes detectado
+  (`pacman`, `apt-get`, `dnf` ou `brew`).
 
-Coloque um `.sf2` em `midi_game/assets/sf2/` se quiser escolher o seu
-próprio SoundFont (senão baixe um qualquer, ex.: TimGM6mb ou FluidR3_GM).
+No Arch/Manjaro o `pacman` só mantém a versão mais recente do Python nos
+repositórios oficiais, que pode estar fora da faixa suportada — nesse caso o
+instalador avisa e recomenda uma instalação manual (ex.: via `pyenv`).
+
+Se preferir escolher seu próprio SoundFont, coloque um `.sf2` em
+`midi_game/assets/sf2/` antes de rodar `make install` (senão o instalador
+baixa um automaticamente).
 
 ## Executando o jogo
 
