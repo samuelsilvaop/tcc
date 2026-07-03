@@ -3,6 +3,7 @@ import pygame.freetype
 
 from midi_game.config import load_config
 from midi_game.fonts import get_font
+from midi_game.sounds import MIXER_FREQUENCY
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -43,6 +44,10 @@ def _lighten(color, amt: int):
 
 class Graphics:
     def __init__(self):
+        # pygame.init() ja inicializa o mixer no padrao (44100 Hz); sem o
+        # pre_init, o mixer.init(48000) do sounds.py nunca roda e os .ogg de
+        # 48 kHz seriam resampleados (latencia extra que o jogo quer evitar).
+        pygame.mixer.pre_init(frequency=MIXER_FREQUENCY)
         pygame.init()
         pygame.freetype.init()
 
@@ -89,17 +94,25 @@ class Graphics:
     def refresh_display(self, force: bool = False):
         info = pygame.display.Info()
 
-        new_w = info.current_w
-        new_h = info.current_h
-
-        if (not force) and (new_w == self.screen_width and new_h == self.screen_height):
+        if (not force) and (
+            info.current_w == self.screen_width
+            and info.current_h == self.screen_height
+        ):
             return
+
+        # rele o config: numero de teclas / nota mais grave podem ter mudado
+        # nos Ajustes (antes so' valiam depois de fechar e reabrir o jogo)
+        self.config = load_config()
+        self.flash_ms = int(self.config.get("hit_flash_ms", 100))
+        self.num_keys = int(self.config["keyboard_keys"])
+        self.lowest_note = int(self.config.get("lowest_note", 36))
 
         self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         pygame.display.set_caption("MIDI Hero")
 
-        self.screen_width = new_w
-        self.screen_height = new_h
+        # tamanho REAL da surface criada -- o Info() pre-set_mode pode
+        # divergir em Wayland/HiDPI (mesma razao do get_size() no splash.py)
+        self.screen_width, self.screen_height = self.screen.get_size()
 
         self.WHITE_KEY_HEIGHT = int(self.screen_height * 0.28)
         self.BLACK_KEY_HEIGHT = int(self.WHITE_KEY_HEIGHT * 0.66)

@@ -8,7 +8,15 @@ import platform
 import time
 from pathlib import Path
 
-import fluidsynth
+# O pyfluidsynth carrega a lib nativa (libfluidsynth) no proprio import e
+# levanta ImportError se ela nao estiver instalada no sistema. Como o main.py
+# importa este modulo incondicionalmente, sem essa guarda o jogo crashava na
+# inicializacao mesmo com o som ao vivo desligado (e mesmo com os .ogg ja
+# prontos, situacao em que o FluidSynth nem e' necessario).
+try:
+    import fluidsynth
+except Exception:
+    fluidsynth = None
 
 SF2_FOLDER = Path(__file__).parent / "assets" / "sf2"
 
@@ -139,6 +147,12 @@ class LiveSynth:
 
 
 def create_live_synth(diagnose_and_test: bool = True, gain: float = 0.5):
+    if fluidsynth is None:
+        print(
+            "[AVISO] LiveSynth: biblioteca FluidSynth nao encontrada no sistema; "
+            "som do teclado ao vivo desabilitado."
+        )
+        return None
     sf2 = _find_soundfont()
     if not sf2:
         print(

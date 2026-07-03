@@ -139,9 +139,11 @@ def main():
 
                 # retry -> volta no loop e tenta de novo
 
-            # se voltou ao menu (sem teclado), reinicia o while do menu
+            # se voltou ao menu (sem teclado), sai do loop da musica e
+            # reinicia o while do menu (continue aqui recomecava o countdown
+            # da mesma musica pra sempre, sem nunca voltar ao menu)
             if port is None:
-                continue
+                break
 
             # LiveSynth (som do teclado ao vivo)
             live = (
