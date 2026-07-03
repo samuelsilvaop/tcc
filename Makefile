@@ -14,7 +14,7 @@ VENV    := .venv
 PIP     := $(VENV)/bin/pip
 PYEXEC  := $(VENV)/bin/python
 
-.PHONY: all install run clean help
+.PHONY: all install run clean uninstall help
 
 all: install
 
@@ -60,6 +60,13 @@ clean:
 	find . -name "*.pyc" -delete 2>/dev/null || true
 
 # ------------------------------------------------------------------
+# uninstall: desinstalador completo e interativo (venv, cache, dados
+# salvos e, se confirmado, fluidsynth/ffmpeg do sistema)
+# ------------------------------------------------------------------
+uninstall:
+	@bash uninstall.sh
+
+# ------------------------------------------------------------------
 # Dicas de instalação por sistema
 # ------------------------------------------------------------------
 _sys_hint:
@@ -85,5 +92,6 @@ help:
 	@echo "  make install  - Cria venv e instala dependencias Python"
 	@echo "  make run      - Executa o jogo"
 	@echo "  make clean    - Remove venv e arquivos de cache"
+	@echo "  make uninstall - Desinstalador completo e interativo (pede confirmacao)"
 	@echo ""
-	@echo "Para Windows: execute install.bat"
+	@echo "Para Windows: execute install.bat (instalar) ou uninstall.bat (desinstalar)"
