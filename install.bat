@@ -74,10 +74,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Atualiza o PATH desta janela com o valor que o instalador do winget acabou
+REM de gravar no registro -- assim nao precisa fechar/reabrir o terminal so pra
+REM o "py"/"python" novo aparecer.
+call :refrescar_path
+
 py -%PY_RECOMENDADA% --version >nul 2>&1
 if errorlevel 1 (
-    echo [AVISO] Python foi instalado, mas nao foi reconhecido nesta janela.
-    echo         Feche este terminal, abra um novo e rode install.bat de novo.
+    echo [AVISO] Python foi instalado, mas nao foi reconhecido nesta janela
+    echo         mesmo apos atualizar o PATH. Feche este terminal, abra um novo
+    echo         e rode install.bat de novo.
     pause
     exit /b 1
 )
@@ -104,7 +110,20 @@ if not exist ".venv" (
 )
 
 echo Instalando dependencias Python...
-.venv\Scripts\pip install --upgrade pip
+echo %CD% | findstr /I "OneDrive" >nul
+if not errorlevel 1 (
+    echo [AVISO] Esta pasta esta dentro do OneDrive. A sincronizacao do OneDrive
+    echo         costuma deixar a instalacao bem mais lenta ^(pode parecer travado
+    echo         por varios minutos, principalmente no passo "Installing collected
+    echo         packages"^). Isso e normal nessa condicao -- so aguarde terminar.
+    echo         Se puder, mova a pasta do jogo para fora do OneDrive ^(ex: C:\MidiHero^)
+    echo         para acelerar.
+    echo.
+)
+REM pip nao consegue substituir o proprio pip.exe em execucao no Windows -- por
+REM isso o upgrade tem que ser feito via "python -m pip", nunca via "pip install
+REM --upgrade pip" direto (senao da erro "To modify pip, please run...").
+.venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\pip install -r requirements.txt
 if errorlevel 1 (
     echo [ERRO] Falha ao instalar dependencias.
@@ -189,7 +208,9 @@ if errorlevel 1 (
         winget install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements
         if not errorlevel 1 (
             echo [OK] ffmpeg instalado.
-            set "PRECISA_REABRIR_TERMINAL=1"
+            call :refrescar_path
+            where ffmpeg >nul 2>&1
+            if errorlevel 1 set "PRECISA_REABRIR_TERMINAL=1"
         ) else (
             echo [ERRO] Falha ao instalar ffmpeg via winget.
         )
@@ -251,3 +272,15 @@ if not exist "run.bat" (
 
 echo Instalacao concluida!
 pause
+goto :eof
+
+REM ---- Recarrega o PATH desta janela a partir do registro (Machine + User),
+REM igual o Windows faria ao abrir um terminal novo. Usado depois de instalar
+REM algo via winget para nao depender do usuario fechar/reabrir o terminal.
+:refrescar_path
+set "PATH_SISTEMA="
+set "PATH_USUARIO="
+for /f "tokens=2,*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "PATH_SISTEMA=%%B"
+for /f "tokens=2,*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "PATH_USUARIO=%%B"
+set "PATH=%PATH_SISTEMA%;%PATH_USUARIO%;%PATH%"
+exit /b 0
