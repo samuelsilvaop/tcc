@@ -100,9 +100,11 @@ jobs:
   # ---------------------------------------------------------------------------
   sast:
     needs: detect
-    # Pula em PRs do Dependabot: o token vira somente leitura e o upload do
-    # SARIF falharia; bump de dependencia tambem nao muda codigo de aplicacao.
-    if: needs.detect.outputs.app == 'true' && github.actor != 'dependabot[bot]'
+    # Code scanning so existe em repo publico (ou privado com GitHub Advanced
+    # Security) - quando o repo virar publico, este job ativa sozinho.
+    # Tambem pula em PRs do Dependabot: o token vira somente leitura e o
+    # upload do SARIF falharia.
+    if: needs.detect.outputs.app == 'true' && !github.event.repository.private && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
