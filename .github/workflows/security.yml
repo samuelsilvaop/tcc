@@ -71,13 +71,17 @@ jobs:
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
+          # Obrigatorio a partir da v3 para escanear PRs.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
   # ---------------------------------------------------------------------------
   # SEMPRE (em PR): revisao de dependencias adicionadas no diff.
   # ---------------------------------------------------------------------------
   dependency-review:
-    if: github.event_name == 'pull_request'
+    # So funciona em repo publico (ou privado com GitHub Advanced Security).
+    # Quando o repo virar publico, este job ativa sozinho.
+    if: github.event_name == 'pull_request' && !github.event.repository.private
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
