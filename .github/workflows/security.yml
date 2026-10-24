@@ -118,6 +118,24 @@ jobs:
           languages: ${{ needs.detect.outputs.node == 'true' && 'javascript-typescript' || '' }}${{ needs.detect.outputs.python == 'true' && ' python' || '' }}${{ needs.detect.outputs.go == 'true' && ' go' || '' }}
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
 
+  # SAST em repo privado: o CodeQL acima so roda em repo publico, entao sem
+  # este job o repo ficava sem SAST nenhum. Semgrep OSS roda sem GHAS e bloqueia
+  # em severidade ERROR. Quando o repo virar publico, o CodeQL assume e este job
+  # sai de cena sozinho. Rulesets explicitos: `--config auto` exige telemetria.
+  sast-semgrep:
+    needs: detect
+    if: needs.detect.outputs.app == 'true' && github.event.repository.private
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Semgrep
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet semgrep==1.182.1
+          semgrep scan --metrics=off --config p/default --config p/python \
+            --severity ERROR --error
+
   # ---------------------------------------------------------------------------
   # Vulnerabilidades em dependencias: so se houver lockfile.
   # ---------------------------------------------------------------------------
@@ -227,6 +245,7 @@ jobs:
       - secret-scan
       - dependency-review
       - sast
+      - sast-semgrep
       - deps-vuln
       - iac-scan
       - container-scan
